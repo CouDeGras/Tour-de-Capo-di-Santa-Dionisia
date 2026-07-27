@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import math
 import os
@@ -17,6 +19,15 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+
+try:
+    from cryptography.hazmat.primitives import padding as _aes_padding
+    from cryptography.hazmat.primitives.ciphers import Cipher as _AesCipher, algorithms as _aes_algorithms, modes as _aes_modes
+except Exception:
+    _aes_padding = None
+    _AesCipher = None
+    _aes_algorithms = None
+    _aes_modes = None
 
 try:
     from zoneinfo import ZoneInfo
@@ -56,26 +67,60 @@ from dashboard.models import IrrigationDecision, MetarReading
 # irrigation events (epoch + percent + pump seconds), so the pumps can be
 # stateless between runs.
 #
-# Topic namespace: "notre_dame/sainte_croix/saignes_en_padaine/*" -- scoped
-# to this property so it can't collide with other (deprecated) sensors that
-# used to share the same broker under the old "fuenteazahar/..." prefix.
+# Topic namespace: "tour_genoise/capo_di_santa_dionisia/*" -- scoped to this
+# property so it can't collide with other (deprecated) sensors that used to
+# share the same broker under the old "fuenteazahar/..." prefix, and again
+# under "notre_dame/sainte_croix/saignes_en_padaine/..." before this rename.
 MQTT_SEND_ENABLED = True
 MQTT_BROKER_HOST = "broker.emqx.io"                    # placeholder broker
 MQTT_BROKER_PORT = 1883
-MQTT_TOPIC_PUB = "notre_dame/sainte_croix/saignes_en_padaine/pub"
-MQTT_TOPIC_ACK = "notre_dame/sainte_croix/saignes_en_padaine/ack"
+MQTT_TOPIC_PUB = "tour_genoise/capo_di_santa_dionisia/pub"
+MQTT_TOPIC_ACK = "tour_genoise/capo_di_santa_dionisia/ack"
 MQTT_QOS = 1
 MQTT_RETAIN = True          # retained -> a pump that reconnects gets the latest schedule
-MQTT_CLIENT_ID_PREFIX = "fuenteazahar-sched"
-MQTT_ACK_CLIENT_ID_PREFIX = "fuenteazahar-ackwatch"
+MQTT_CLIENT_ID_PREFIX = "capo-di-santa-dionisia-sched"
+MQTT_ACK_CLIENT_ID_PREFIX = "capo-di-santa-dionisia-ackwatch"
 MQTT_KEEPALIVE_SECONDS = 30
 MQTT_USERNAME = None        # set if your broker needs auth
 MQTT_PASSWORD = None
 
+# AES-128-CBC key for the pub-topic payload, derived from a human-typed
+# passphrase rather than requiring someone to paste a random base64 key:
+# key = MD5(password) (see mqtt_pub_password_to_key() below) -- MD5 is a
+# convenient fit only because its 16-byte digest happens to be exactly an
+# AES-128 key's length, NOT for any cryptographic property. A plain,
+# unsalted, unstretched hash of a human-memorable password is guessable by
+# brute force far faster than a real KDF (PBKDF2/scrypt/argon2) would allow
+# -- acceptable here (a hobby irrigation controller, not a system with a
+# real threat model), not a pattern to copy into anything higher-stakes.
+# site_config.json's "mqtt_pub_password" field, set via
+# refresh_site_config_overrides() below. None means "not configured yet":
+# publish_mqtt_schedule() falls back to plaintext JSON and warns loudly, so
+# a fresh checkout / pre-firmware-rollout deployment keeps working. The ack
+# topic (pump -> dashboard) is unencrypted for now; see MQTT_TOPIC_ACK.
+MQTT_PUB_AES_KEY: Optional[bytes] = None
+
+
+def mqtt_pub_password_to_key(password: str) -> bytes:
+    return hashlib.md5(password.encode("utf-8")).digest()
+
+# ====== APP DATA DIRECTORY ======
+# When CAPO_DI_SANTA_DIONISIA_DATA_DIR is set (the Electron/AppImage-bundled
+# deployment sets it to a real writable per-user directory, since an
+# AppImage mounts read-only from a fresh temp path every launch), all
+# runtime state below -- JSON caches, site config, weather.txt -- lives
+# under <that>/data/ instead of next to this script. Unset (the existing
+# bare-metal/systemd deployment) keeps today's exact behavior: everything
+# under this project's own data/ directory. Same env var core/settings.py
+# reads for db.sqlite3's location, so both processes share one writable
+# root.
+_APP_DATA_ROOT = Path(os.environ.get("CAPO_DI_SANTA_DIONISIA_DATA_DIR") or Path(__file__).resolve().parent)
+_DATA_DIR = _APP_DATA_ROOT / "data"
+
 # Pump nodes publish an ACK (device id/MAC + what they did) after every wake.
 # We keep a persistent background subscriber (not tied to the 3h forecast
 # cycle) so the dashboard can show nodes checking in in near-real time.
-PUMP_ACKS_JSON = "/home/josue/saignes_en_padaine/data/pump_acks.json"
+PUMP_ACKS_JSON = str(_DATA_DIR / "pump_acks.json")
 PUMP_ACKS_RECENT_MAX = 50
 
 # ====== OPENCLAW SEND CONFIG ======
@@ -99,14 +144,14 @@ DEFAULT_STATION = "ZSNJ"
 DEFAULT_LAT = 31.7420
 DEFAULT_LON = 118.8622
 DEFAULT_TZ = "Asia/Shanghai"
-STATION_GEO_CACHE_JSON = "/home/josue/saignes_en_padaine/data/station_geo_cache.json"
+STATION_GEO_CACHE_JSON = str(_DATA_DIR / "station_geo_cache.json")
 
 # ====== SITE CONFIG OVERRIDE ======
 # User-editable via the dashboard's config panel. data/site_config.json is
 # written by main.py's /api/config endpoint; if it's missing, unreadable, or
 # a field is blank/absent, that field's hardcoded default above/below is used
 # untouched -- this file is optional, not required.
-SITE_CONFIG_JSON = "/home/josue/saignes_en_padaine/data/site_config.json"
+SITE_CONFIG_JSON = str(_DATA_DIR / "site_config.json")
 
 
 def load_site_config(path: str) -> Dict[str, Any]:
@@ -134,7 +179,7 @@ def refresh_site_config_overrides() -> None:
     cycle instead. Still called once at module load too, for the
     --current-only/--fetch-only/no-flag single-shot invocations, matching
     the original one-read-per-process behavior exactly."""
-    global DEFAULT_STATION, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_TOPIC_PUB, MQTT_TOPIC_ACK
+    global DEFAULT_STATION, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_TOPIC_PUB, MQTT_TOPIC_ACK, MQTT_PUB_AES_KEY
     site_cfg = load_site_config(SITE_CONFIG_JSON)
 
     station_raw = str(site_cfg.get("station") or "").strip().upper()
@@ -157,6 +202,12 @@ def refresh_site_config_overrides() -> None:
         MQTT_TOPIC_PUB = f"{root_topic_raw}/pub"
         MQTT_TOPIC_ACK = f"{root_topic_raw}/ack"
 
+    # Any non-empty string derives a valid 16-byte key via MD5 (see
+    # mqtt_pub_password_to_key()), so unlike the old base64-key field there's
+    # no "invalid" state to warn about here -- just configured or not.
+    password_raw = str(site_cfg.get("mqtt_pub_password") or "").strip()
+    MQTT_PUB_AES_KEY = mqtt_pub_password_to_key(password_raw) if password_raw else None
+
 
 refresh_site_config_overrides()
 
@@ -172,6 +223,21 @@ OWM_APPID = os.getenv("OWM_APPID", "4fb277504a118b9320ba6378abbdaf71")
 
 OPEN_METEO_API_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_FORECAST_DAYS = 10  # covers HOURS_AHEAD=120 with margin; no API key needed
+
+# Reverse-geocodes an airport's coordinates to a human place name (e.g.
+# "Changning District, Shanghai, China") for display, instead of the
+# aviationweather.gov site name (an airport terminal name, e.g. "Shanghai
+# Hongqiao Intl"). zoom=8 (district-level) rather than something more precise
+# -- an airport's exact coordinates sit outside town centers, so a tighter
+# zoom (suburb/village level) occasionally resolves to an obscure hamlet name
+# or one with no English translation at all, where district-level always
+# reads as a sensible, stable place name. See resolve_station_geo().
+NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/reverse"
+NOMINATIM_USER_AGENT = os.getenv(
+    "NOMINATIM_USER_AGENT",
+    "capo-di-santa-dionisia-irrigation-dashboard/1.0 (contact: yisu.fang@outlook.com)",
+)
+NOMINATIM_ZOOM = 8
 
 TIMEOUT_SECONDS = 20
 HOURS_AHEAD = 120
@@ -192,8 +258,8 @@ EXTREME_HEAT_MAX_C = 40.0
 RAIN_POSTPONE_FRACTION = 0.20
 RAIN_RESET_FRACTION = 0.80
 MAX_INTERVAL_DAYS = 14.0
-NEXT_WATERING_JSON = "/home/josue/saignes_en_padaine/data/next_watering.json"
-WEATHER_CACHE_JSON = "/home/josue/saignes_en_padaine/data/weather_cache.json"
+NEXT_WATERING_JSON = str(_DATA_DIR / "next_watering.json")
+WEATHER_CACHE_JSON = str(_DATA_DIR / "weather_cache.json")
 # Irrigation decisions and METAR readings live in the ORM instead (see the
 # django.setup() bootstrap above and dashboard/models.py's
 # IrrigationDecision/MetarReading) -- both the hourly current-only refresh
@@ -215,14 +281,14 @@ RUN_INTERVAL_HOURS = 3
 FETCH_RETRY_ATTEMPTS = 3
 FETCH_RETRY_WAIT_SECONDS = 5
 SOURCE_PAYLOAD_CACHE = {
-    "Yr.no": "/home/josue/saignes_en_padaine/data/last_ok_yr.json",
-    "OWM": "/home/josue/saignes_en_padaine/data/last_ok_owm.json",
-    "Open-Meteo": "/home/josue/saignes_en_padaine/data/last_ok_om.json",
-    "METAR": "/home/josue/saignes_en_padaine/data/last_ok_metar.json",
+    "Yr.no": str(_DATA_DIR / "last_ok_yr.json"),
+    "OWM": str(_DATA_DIR / "last_ok_owm.json"),
+    "Open-Meteo": str(_DATA_DIR / "last_ok_om.json"),
+    "METAR": str(_DATA_DIR / "last_ok_metar.json"),
 }
 
 #DEFAULT_OUTPUT = os.getenv("WEATHER_TEXT_OUTPUT", "./garden_weather_cache.txt")
-DEFAULT_OUTPUT = "/home/josue/saignes_en_padaine/data/weather.txt"
+DEFAULT_OUTPUT = str(_DATA_DIR / "weather.txt")
 
 @dataclass
 class LocationInfo:
@@ -300,28 +366,77 @@ def _load_station_geo_cache() -> Dict[str, Any]:
     return _load_json_dict(STATION_GEO_CACHE_JSON)
 
 
+def reverse_geocode_place_name(session: requests.Session, lat: float, lon: float, fallback: str) -> str:
+    """Nominatim reverse geocode of (lat, lon) to a human place name (e.g.
+    "Changning District, Shanghai, China"), for display in place of an
+    airport's own terminal name. Best-effort: any failure (network,
+    timeout, malformed response) returns `fallback` rather than raising --
+    this is a cosmetic display string, not something that should ever block
+    station resolution the way a missing lat/lon would."""
+    try:
+        resp = session.get(
+            NOMINATIM_API_URL,
+            params={"format": "jsonv2", "lat": lat, "lon": lon, "zoom": NOMINATIM_ZOOM, "accept-language": "en"},
+            headers={"User-Agent": NOMINATIM_USER_AGENT},
+            timeout=TIMEOUT_SECONDS,
+        )
+        if resp.status_code != 200:
+            return fallback
+        return str(resp.json().get("display_name") or fallback)
+    except Exception:
+        return fallback
+
+
 def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
     """Resolve an ICAO airport code to (lat, lon, tz_name, display_name).
 
-    lat/lon/display name come from aviationweather.gov's /stationinfo
-    endpoint -- static registry metadata (site name, state, country), not a
-    live observation. Deliberately NOT sourced from METAR: a station can be
-    a registered, real airport with zero recent METAR observations (e.g.
-    Hualien/RCYU, whose sensor just isn't currently reporting), in which
-    case /metar returns nothing at all and there'd be no lat/lon/name to
-    resolve. /stationinfo answers "does this airport exist and where is it"
-    independently of "is it reporting weather right now" (that's still
-    METAR's job, in fetch_metar_rain_with_retry / metar_latest_observation).
-    tz_name is reverse-geocoded from that point via Open-Meteo's
-    timezone=auto (free, no key, already used elsewhere in this file for
-    forecasts). Successful lookups are cached in STATION_GEO_CACHE_JSON
-    keyed by station_id -- airport coordinates don't move, so this network
-    round trip only needs to happen once per airport rather than on every
-    3-hourly/hourly run."""
+    lat/lon come from aviationweather.gov's /stationinfo endpoint -- static
+    registry metadata (site name, state, country), not a live observation.
+    Deliberately NOT sourced from METAR: a station can be a registered, real
+    airport with zero recent METAR observations (e.g. Hualien/RCYU, whose
+    sensor just isn't currently reporting), in which case /metar returns
+    nothing at all and there'd be no lat/lon/name to resolve. /stationinfo
+    answers "does this airport exist and where is it" independently of "is
+    it reporting weather right now" (that's still METAR's job, in
+    fetch_metar_rain_with_retry / metar_latest_observation). tz_name is
+    reverse-geocoded from that point via Open-Meteo's timezone=auto (free,
+    no key, already used elsewhere in this file for forecasts). display_name
+    is a Nominatim reverse geocode of the same point (see
+    reverse_geocode_place_name) -- a real place name reads better than an
+    airport terminal name -- falling back to the airport's own site/country
+    if that lookup fails. Successful lookups are cached in
+    STATION_GEO_CACHE_JSON keyed by station_id -- airport coordinates don't
+    move, so this network round trip only needs to happen once per airport
+    rather than on every 3-hourly/hourly run. Cache entries written before
+    Nominatim was added lack "name_source", which forces exactly one
+    re-resolution to upgrade them rather than trusting the old airport-name
+    entry forever."""
     cache = _load_station_geo_cache()
     cached = cache.get(station_id)
-    if cached:
+    if cached and cached.get("name_source") == "nominatim":
         return float(cached["lat"]), float(cached["lon"]), str(cached["tz"]), str(cached["name"])
+
+    if cached:
+        # Upgrade path: lat/lon/tz are already known -- re-fetching them from
+        # stationinfo/Open-Meteo just to backfill the missing name_source
+        # marker would make an already-working cached station newly
+        # vulnerable to failing on either of those calls for no reason (this
+        # is exactly what happened the first time: Open-Meteo's tz lookup
+        # hit a transient error, and a station that used to resolve
+        # instantly from cache fell all the way back to the hardcoded
+        # DEFAULT_LAT/DEFAULT_LON emergency fallback instead). Only the one
+        # new call this upgrade actually needs -- Nominatim -- runs here.
+        lat, lon, tz_name = float(cached["lat"]), float(cached["lon"]), str(cached["tz"])
+        with requests.Session() as session:
+            session.headers.update({"Connection": "close"})
+            name = reverse_geocode_place_name(session, lat, lon, fallback=str(cached["name"]))
+        cache[station_id] = {
+            "lat": lat, "lon": lon, "tz": tz_name, "name": name,
+            "name_source": "nominatim",
+            "resolved_at_epoch": int(time.time()),
+        }
+        atomic_write_json(STATION_GEO_CACHE_JSON, cache)
+        return lat, lon, tz_name, name
 
     with requests.Session() as session:
         session.headers.update({"Connection": "close"})
@@ -339,7 +454,8 @@ def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
         lat, lon = float(info["lat"]), float(info["lon"])
         site = str(info.get("site") or station_id)
         country = str(info.get("country") or "")
-        name = f"{site}, {country}" if country else site
+        airport_name = f"{site}, {country}" if country else site
+        name = reverse_geocode_place_name(session, lat, lon, fallback=airport_name)
 
         tz_resp = session.get(
             OPEN_METEO_API_URL,
@@ -352,6 +468,7 @@ def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
 
     cache[station_id] = {
         "lat": lat, "lon": lon, "tz": tz_name, "name": name,
+        "name_source": "nominatim",
         "resolved_at_epoch": int(time.time()),
     }
     atomic_write_json(STATION_GEO_CACHE_JSON, cache)
@@ -597,6 +714,29 @@ def atomic_write_json(path: str, payload: Dict[str, Any]) -> None:
     os.replace(tmp_name, out_path)
 
 
+def encrypt_pub_payload(plaintext: bytes, key: bytes) -> bytes:
+    """AES-128-CBC-encrypt `plaintext` under `key` (exactly 16 bytes) with a
+    fresh random IV, PKCS7-padded, and return base64(iv || ciphertext) --
+    ASCII bytes safe to hand straight to paho as the MQTT payload. Wire
+    format is deliberately the simplest thing an embedded AES library
+    (mbedTLS, ESP32's own crypto, etc.) can decrypt: base64-decode, split
+    off the first 16 bytes as the IV, AES-128-CBC-decrypt the rest, strip
+    PKCS7 padding. No authentication tag (that's GCM, not CBC) -- the ack
+    topic's own encryption pass can revisit that if forged/tampered pump
+    commands become a real threat model here."""
+    if _AesCipher is None:
+        raise RuntimeError(
+            "the 'cryptography' package is not installed; run 'pip install cryptography' "
+            "to enable MQTT payload encryption."
+        )
+    iv = os.urandom(16)
+    padder = _aes_padding.PKCS7(_aes_algorithms.AES.block_size).padder()
+    padded = padder.update(plaintext) + padder.finalize()
+    encryptor = _AesCipher(_aes_algorithms.AES(key), _aes_modes.CBC(iv)).encryptor()
+    ciphertext = encryptor.update(padded) + encryptor.finalize()
+    return base64.b64encode(iv + ciphertext)
+
+
 def publish_mqtt_schedule(payload: Dict[str, Any]) -> str:
     """Publish the irrigation schedule payload to the MQTT broker.
 
@@ -605,6 +745,13 @@ def publish_mqtt_schedule(payload: Dict[str, Any]) -> str:
     description of what was published. Raises RuntimeError if paho-mqtt is not
     installed, or propagates any connection/publish error from paho so the
     caller can decide whether to treat it as fatal.
+
+    When MQTT_PUB_AES_KEY is configured (derived from site_config.json's
+    mqtt_pub_password), the wire payload is AES-128-CBC-encrypted and
+    base64-transported instead of raw JSON -- see encrypt_pub_payload().
+    With no password configured at all, it publishes plaintext JSON and
+    warns, so a fresh checkout / pre-firmware-rollout deployment keeps
+    working.
     """
     if _mqtt_publish is None:
         raise RuntimeError(
@@ -617,11 +764,23 @@ def publish_mqtt_schedule(payload: Dict[str, Any]) -> str:
         auth = {"username": MQTT_USERNAME, "password": MQTT_PASSWORD or ""}
 
     client_id = f"{MQTT_CLIENT_ID_PREFIX}-{uuid.uuid4().hex[:6]}"
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    body_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+    if MQTT_PUB_AES_KEY is not None:
+        wire_body = encrypt_pub_payload(body_json.encode("utf-8"), MQTT_PUB_AES_KEY)
+        encryption_note = "aes128-cbc+b64"
+    else:
+        wire_body = body_json
+        encryption_note = "PLAINTEXT (no mqtt_pub_password configured)"
+        print(
+            "WARNING: publishing MQTT schedule as plaintext JSON -- set "
+            "mqtt_pub_password in site_config.json to encrypt it.",
+            file=sys.stderr,
+        )
 
     _mqtt_publish.single(
         MQTT_TOPIC_PUB,
-        payload=body,
+        payload=wire_body,
         qos=MQTT_QOS,
         retain=MQTT_RETAIN,
         hostname=MQTT_BROKER_HOST,
@@ -631,7 +790,7 @@ def publish_mqtt_schedule(payload: Dict[str, Any]) -> str:
         auth=auth,
     )
     return (
-        f"{len(body)} bytes -> {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT} "
+        f"{len(wire_body)} bytes ({encryption_note}) -> {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT} "
         f"topic '{MQTT_TOPIC_PUB}' (qos={MQTT_QOS}, retain={MQTT_RETAIN}, client_id={client_id})"
     )
 
@@ -807,9 +966,15 @@ def quantize_epoch_to_solar(due_epoch: float, lat_deg: float, lon_deg: float) ->
     candidates.sort(key=lambda x: x[0])
     for ep, name in candidates:
         if ep >= float(due_epoch):
-            return int(round(ep)), name
+            # floor, not round: rounding up can push the returned integer
+            # above the true (fractional-second) anchor instant, so a later
+            # run that re-quantizes this exact stored value would find its
+            # own anchor no longer satisfies `ep >= due_epoch` and silently
+            # skip forward to the next one. Flooring guarantees the stored
+            # epoch is always <= the true instant, keeping this idempotent.
+            return int(math.floor(ep)), name
     ep, name = candidates[-1]
-    return int(round(ep)), name
+    return int(math.floor(ep)), name
 
 
 # ---------- Fresh fractional percentage at an arbitrary event time ----------
@@ -2067,7 +2232,7 @@ def render_report(
 ) -> str:
     lines: List[str] = []
 
-    lines.append("Fuenteazahar Irrigation Decision")
+    lines.append("Tour génoise de Capo di Santa Dionisia Irrigation Decision")
     lines.append("=" * 80)
     lines.append(f"{now_local.isoformat(timespec='seconds')}")
     lines.append(f"location_source={location.source_text}")
@@ -3391,6 +3556,21 @@ def run_service(args) -> int:
             print("WARNING: ack subscriber unavailable; continuing without pump-ack tracking.", file=sys.stderr)
     else:
         print("WARNING: MQTT_SEND_ENABLED is False; no ack subscriber, no schedule publish.", file=sys.stderr)
+
+    # First-run bootstrap: on a completely fresh data directory (no
+    # weather_cache.json yet -- a brand-new install, e.g. a freshly-launched
+    # AppImage) the dashboard would otherwise sit in demo mode, and even the
+    # manual refresh button refuses to help (run_fetch_only requires an
+    # existing cache to refresh), until whatever's left of the current
+    # RUN_INTERVAL_HOURS window elapses. Run one full cycle immediately
+    # instead of making a new install wait; every cycle after this one goes
+    # through the normal quantized schedule below.
+    if not Path(WEATHER_CACHE_JSON).expanduser().exists():
+        print("run_service: no weather_cache.json yet -- running an initial fetch now instead of waiting for the next scheduled cycle.", file=sys.stderr)
+        try:
+            run_once(args)
+        except Exception as e:
+            print(f"ERROR: initial run_service fetch failed ({type(e).__name__}: {e})", file=sys.stderr)
 
     while True:
         now_local = datetime.now().astimezone()

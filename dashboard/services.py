@@ -27,13 +27,22 @@ from .i18n import DEFAULT_LANG, LANGS
 from .models import IrrigationDecision, MetarReading
 
 BASE_DIR = settings.BASE_DIR
-DATA_DIR = BASE_DIR / "data"
+# settings.DATA_DIR (not BASE_DIR) -- respects CAPO_DI_SANTA_DIONISIA_DATA_DIR
+# the same way weather_mqtt.py's own path constants do. Using BASE_DIR here
+# was a real bug: inside the AppImage, BASE_DIR resolves to a path inside
+# the read-only mount, which gets a fresh random location every single
+# launch (/tmp/.mount_XXXXXX/...) -- so this always looked for
+# weather_cache.json in a directory that was both wrong and different every
+# time, permanently stuck in demo mode regardless of how much real data
+# weather_mqtt.py correctly wrote to the actual persistent
+# CAPO_DI_SANTA_DIONISIA_DATA_DIR.
+DATA_DIR = settings.DATA_DIR / "data"
 
 WEATHER_CACHE = DATA_DIR / "weather_cache.json"
 NEXT_WATERING = DATA_DIR / "next_watering.json"
 PUMP_ACKS = DATA_DIR / "pump_acks.json"
 SITE_CONFIG = DATA_DIR / "site_config.json"
-SITE_CONFIG_FIELDS = ("station", "broker", "root_topic", "lang")
+SITE_CONFIG_FIELDS = ("station", "broker", "root_topic", "lang", "sun_projection", "sun_view", "mqtt_pub_password")
 WEATHER_MQTT_SCRIPT = BASE_DIR / "weather_mqtt.py"
 REFRESH_TIMEOUT_SECONDS = 90
 
@@ -53,7 +62,24 @@ DEFAULT_STATION = "ZSNJ"
 # other). Used so the config popup shows what broker/topic is actually in
 # effect instead of a blank field when site_config.json doesn't set one.
 DEFAULT_BROKER = "broker.emqx.io:1883"
-DEFAULT_ROOT_TOPIC = "notre_dame/sainte_croix/saignes_en_padaine"
+DEFAULT_ROOT_TOPIC = "tour_genoise/capo_di_santa_dionisia"
+
+# The sun-path widget's two radius-vs-elevation mappings (see static/weather.js's
+# drawSunPath) -- both give a true circle in the polar-latitude limit and a
+# non-circular arc otherwise, they just trade off evenly-spaced elevation
+# rings (linear) against a literal bird's-eye view of the sky (orthographic).
+SUN_PROJECTIONS = ("linear", "orthographic")
+DEFAULT_SUN_PROJECTION = "linear"
+
+# Independent of the radius mapping above: which way the widget is meant to
+# be read. 'down' (default) is the standard map convention -- looking down
+# at the sky dome from outside it, N top/E right. 'up' mirrors E/W to match
+# how planetarium/architectural sun charts are actually used -- held
+# overhead, standing on the ground looking up. See static/weather.js's
+# azUnit()/drawSunPath() for the mirroring and the current-sun marker glyph
+# (dot vs cross) this also switches.
+SUN_VIEWS = ("down", "up")
+DEFAULT_SUN_VIEW = "down"
 
 
 def current_lang() -> str:
@@ -122,8 +148,15 @@ def _historic_rows(tz_name: str, station: str) -> list:
 
 
 def api_status() -> dict:
+    site_cfg = api_config_get()
+    sun_projection = site_cfg.get("sun_projection", DEFAULT_SUN_PROJECTION)
+    sun_view = site_cfg.get("sun_view", DEFAULT_SUN_VIEW)
+
     if not WEATHER_CACHE.exists():
-        return _demo_status()
+        data = _demo_status()
+        data["sun_projection"] = sun_projection
+        data["sun_view"] = sun_view
+        return data
 
     data = json.loads(WEATHER_CACHE.read_text(encoding="utf-8"))
     loc = data.setdefault("location", {})
@@ -147,6 +180,8 @@ def api_status() -> dict:
     comparison = data.setdefault("comparison", {})
     comparison["rows"] = _historic_rows(loc.get("tz") or "UTC", station) + list(comparison.get("rows") or [])
 
+    data["sun_projection"] = sun_projection
+    data["sun_view"] = sun_view
     return data
 
 
@@ -170,12 +205,20 @@ def api_acks() -> dict:
 
 
 def api_config_get() -> dict:
+    # mqtt_pub_password is returned in plaintext like every other field here
+    # -- this panel presupposes whoever can reach it already has PSK-level
+    # ownership of the deployment (same trust boundary as reading
+    # site_config.json off disk directly), so there's no "hide the secret
+    # from the browser" concern to design around the way a real per-user
+    # credential would need.
     if not SITE_CONFIG.exists():
         cfg = {k: "" for k in SITE_CONFIG_FIELDS}
         cfg["lang"] = DEFAULT_LANG
         cfg["station"] = DEFAULT_STATION
         cfg["broker"] = DEFAULT_BROKER
         cfg["root_topic"] = DEFAULT_ROOT_TOPIC
+        cfg["sun_projection"] = DEFAULT_SUN_PROJECTION
+        cfg["sun_view"] = DEFAULT_SUN_VIEW
         return cfg
     try:
         data = json.loads(SITE_CONFIG.read_text(encoding="utf-8"))
@@ -187,6 +230,9 @@ def api_config_get() -> dict:
     cfg["station"] = station if ICAO_RE.match(station) else DEFAULT_STATION
     cfg["broker"] = str(cfg["broker"] or "").strip() or DEFAULT_BROKER
     cfg["root_topic"] = str(cfg["root_topic"] or "").strip() or DEFAULT_ROOT_TOPIC
+    cfg["sun_projection"] = cfg["sun_projection"] if cfg["sun_projection"] in SUN_PROJECTIONS else DEFAULT_SUN_PROJECTION
+    cfg["sun_view"] = cfg["sun_view"] if cfg["sun_view"] in SUN_VIEWS else DEFAULT_SUN_VIEW
+    cfg["mqtt_pub_password"] = str(cfg["mqtt_pub_password"] or "")
     return cfg
 
 
@@ -194,18 +240,41 @@ def api_config_save(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a JSON object.")
 
+    # Start from whatever's already on disk (not {}) and only overwrite the
+    # fields this form actually manages (SITE_CONFIG_FIELDS). Anything else
+    # set out-of-band must still survive a config-panel save instead of
+    # being silently dropped the next time someone edits their station or
+    # broker.
     cfg = {}
+    if SITE_CONFIG.exists():
+        try:
+            existing = json.loads(SITE_CONFIG.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                cfg = {k: v for k, v in existing.items() if k not in SITE_CONFIG_FIELDS}
+        except Exception:
+            pass
+
     station = str(payload.get("station") or "").strip().upper()
     if station and not ICAO_RE.match(station):
         raise ValueError("'station' must be a 4-letter ICAO airport code (e.g. ZSNJ, KJFK, EGLL).")
     cfg["station"] = station
-    for key in ("broker", "root_topic"):
+    for key in ("broker", "root_topic", "mqtt_pub_password"):
         v = payload.get(key, "")
         cfg[key] = "" if v is None else str(v).strip()
     lang = str(payload.get("lang") or "").strip()
     if lang and lang not in LANGS:
         raise ValueError(f"'lang' must be one of {', '.join(LANGS)}.")
     cfg["lang"] = lang or DEFAULT_LANG
+
+    sun_projection = str(payload.get("sun_projection") or "").strip()
+    if sun_projection and sun_projection not in SUN_PROJECTIONS:
+        raise ValueError(f"'sun_projection' must be one of {', '.join(SUN_PROJECTIONS)}.")
+    cfg["sun_projection"] = sun_projection or DEFAULT_SUN_PROJECTION
+
+    sun_view = str(payload.get("sun_view") or "").strip()
+    if sun_view and sun_view not in SUN_VIEWS:
+        raise ValueError(f"'sun_view' must be one of {', '.join(SUN_VIEWS)}.")
+    cfg["sun_view"] = sun_view or DEFAULT_SUN_VIEW
 
     tmp = SITE_CONFIG.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")

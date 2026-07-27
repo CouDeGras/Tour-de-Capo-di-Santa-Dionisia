@@ -1,6 +1,9 @@
 {
   "station": "ZSSS",
   "broker": "broker.emqx.io:1883",
-  "root_topic": "notre_dame/sainte_croix/saignes_en_padaine",
-  "lang": "en"
+  "root_topic": "tour_genoise/capo_di_santa_dionisia",
+  "mqtt_pub_password": "69PcHBSZ5k9#@h~",
+  "lang": "en",
+  "sun_projection": "orthographic",
+  "sun_view": "down"
 }

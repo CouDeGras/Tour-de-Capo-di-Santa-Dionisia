@@ -2,11 +2,19 @@ __pycache__/
 *.pyc
 .claude/settings.local.json
 
-# Django's own bookkeeping db (auth/sessions/admin) -- dashboard state stays
-# in data/*.json and data/irrigation_history.csv, tracked separately below.
+# SQLite db -- Django's own bookkeeping (auth/sessions/admin) plus
+# dashboard.models' IrrigationDecision/MetarReading. Runtime state, not
+# source; data/*.json below is the other runtime-generated store.
 db.sqlite3
 
 # runtime-generated cache/data files
 data/*
 !data/.gitkeep
 !data/site_config.json
+
+# electron/: node deps, staged backend copy + venv, and build output are
+# all reproducible from source (npm install / build-backend.sh / npm run
+# build) -- none of it belongs in the repo.
+electron/node_modules/
+electron/resources/
+electron/dist/

@@ -1,5 +1,5 @@
 [Unit]
-Description=Saignes-en-Padaine weather/irrigation service (persistent -- tri-hourly forecast cycle, hourly METAR refresh, and MQTT pump-ack listener, all in one process; see weather_mqtt.py --service)
+Description=Capo di Santa Dionisia weather/irrigation service (persistent -- tri-hourly forecast cycle, hourly METAR refresh, and MQTT pump-ack listener, all in one process; see weather_mqtt.py --service)
 After=network-online.target
 Wants=network-online.target
 

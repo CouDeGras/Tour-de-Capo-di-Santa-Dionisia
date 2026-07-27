@@ -99,6 +99,63 @@ header {
 .config-field input#cfg-station { text-transform: uppercase; }
 .config-field-hint { font-size: 0.72rem; opacity: 0.55; }
 
+/* ── Switch (checkbox styled as a two-state toggle) ── */
+/* Standard iOS/Material pill-track + circular-knob shape -- the one place in
+   this stylesheet that breaks from the sharp-cornered "pure black/white"
+   tokens comment at the top of the file, deliberately: a switch is such a
+   universally-recognized shape that a boxy rectangle reads as "unstyled
+   checkbox" rather than "toggle", no matter how consistent it is with
+   everything else. Track/knob still only use --b/--w -- same two-color
+   restriction, just not the same corner radius. State is shown two ways at
+   once (matching .btn-solid/.btn-outline's own invert-on-active pattern
+   elsewhere in this file): the knob slides across, and off/on swaps which
+   side is filled solid vs outlined, so it's legible even to someone who
+   can't see the slide animate (a screen reader gets this from the
+   underlying checkbox's checked state regardless). */
+.switch-row { display: flex; align-items: center; gap: 0.55rem; }
+.switch-row-label { font-size: 0.78rem; opacity: 0.55; transition: opacity 0.15s ease; }
+.switch-row:has(input:checked) .switch-row-label:first-child { opacity: 0.55; }
+.switch-row:has(input:checked) .switch-row-label:last-child { opacity: 1; }
+.switch-row:not(:has(input:checked)) .switch-row-label:first-child { opacity: 1; }
+.switch {
+  position: relative; display: inline-flex; align-items: center; flex-shrink: 0;
+  width: 2.75rem; height: 1.5rem;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute; inset: 0; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.switch-track {
+  position: absolute; inset: 0;
+  display: block;
+  background: var(--w);
+  border: 1.5px solid var(--b);
+  border-radius: 999px;
+  transition: background-color 0.16s ease;
+}
+.switch-knob {
+  position: absolute; top: 1.5px; left: 1.5px;
+  width: 1.1rem; height: 1.1rem;
+  background: var(--b);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.16s cubic-bezier(0.34, 1.2, 0.64, 1), width 0.1s ease;
+}
+.switch input:checked ~ .switch-track { background: var(--b); }
+.switch input:checked ~ .switch-track .switch-knob {
+  transform: translateX(calc(2.75rem - 1.1rem - 2 * 1.5px));
+  background: var(--w);
+}
+/* Knob stretches toward the direction of travel while held, like flicking a
+   real iOS switch -- settles back to round on release. */
+.switch input:active ~ .switch-track .switch-knob { width: 1.35rem; }
+.switch input:checked:active ~ .switch-track .switch-knob {
+  transform: translateX(calc(2.75rem - 1.35rem - 2 * 1.5px));
+}
+.switch input:focus-visible ~ .switch-track { outline: 2px solid var(--b); outline-offset: 2px; }
+.switch:hover .switch-track { opacity: 0.85; }
+
 .config-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
 .btn {
   font-family: inherit; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
@@ -221,6 +278,11 @@ main { padding: 1.2rem 1.8rem; display: flex; flex-direction: column; gap: 0.9re
 .chart-scroll::-webkit-scrollbar { display: none; }
 
 canvas { display: block; image-rendering: pixelated; }
+
+/* Sun path widget's canvas is narrower than the card on wide layouts (it's
+   a fixed square, unlike the scrolling rain charts) -- center it rather
+   than leaving it flush against the card's left edge. */
+#chart-sun { margin: 0 auto; }
 
 /* ── History table ── */
 /* Each table scrolls independently within a fixed-height widget instead of

@@ -1,6 +1,6 @@
 {
-  "name": "saignes-en-padaine",
-  "productName": "Saignes-en-Padaine",
+  "name": "capo-di-santa-dionisia",
+  "productName": "Capo di Santa Dionisia",
   "version": "1.0.0",
   "description": "Irrigation dashboard and weather/MQTT service, bundled as a self-contained Linux AppImage.",
   "private": true,
@@ -15,10 +15,12 @@
     "electron-builder": "^24.13.0"
   },
   "build": {
-    "appId": "com.saignes-en-padaine.dashboard",
-    "productName": "Saignes-en-Padaine",
+    "appId": "com.capo-di-santa-dionisia.dashboard",
+    "productName": "Capo di Santa Dionisia",
+    "artifactName": "${name}-${version}.${ext}",
     "files": [
       "main.js",
+      "preload.js",
       "build/icon.png"
     ],
     "extraResources": [

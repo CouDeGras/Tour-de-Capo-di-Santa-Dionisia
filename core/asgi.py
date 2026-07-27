@@ -1,4 +1,4 @@
-"""ASGI config for the Saignes-en-Padaine dashboard project.
+"""ASGI config for the Capo di Santa Dionisia dashboard project.
 
 Kept alongside wsgi.py (the standard django-admin startproject layout) even
 though the dashboard is currently served over WSGI -- an ASGI entrypoint is

@@ -2,15 +2,16 @@
 
 // Electron shell for the bundled AppImage build: spawns the same Django
 // dashboard + weather_mqtt.py --service the systemd deployment runs, points
-// them at a real writable per-user data directory (SAIGNES_DATA_DIR), waits
-// for the dashboard to answer, then shows it in a window. Tray-resident:
+// them at a real writable per-user data directory
+// (CAPO_DI_SANTA_DIONISIA_DATA_DIR), waits for the dashboard to answer,
+// then shows it in a window. Tray-resident:
 // closing the window hides it rather than quitting, since weather_mqtt.py
 // --service is what actually commands pumps on a schedule -- it should keep
 // running even if nobody has the window open, not stop the moment it's
 // closed. See ../.claude/plans (or the PR this shipped in) for the full
 // design rationale.
 
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
@@ -49,7 +50,7 @@ function appDataDir() {
 function runPython(args, { waitForExit = false } = {}) {
   const child = spawn(VENV_PYTHON, args, {
     cwd: PROJECT_DIR,
-    env: { ...process.env, SAIGNES_DATA_DIR: appDataDir() },
+    env: { ...process.env, CAPO_DI_SANTA_DIONISIA_DATA_DIR: appDataDir() },
   });
   child.stdout.on('data', (d) => process.stdout.write(`[${args[0]}] ${d}`));
   child.stderr.on('data', (d) => process.stderr.write(`[${args[0]}] ${d}`));
@@ -104,19 +105,20 @@ async function startBackend() {
 }
 
 function createWindow(startupError) {
-  // Opt-in via SAIGNES_KIOSK so normal windowed dev/testing (e.g. on this
-  // machine) is unaffected -- a dedicated-hardware deployment (a Pi next to
-  // the garden, say) would set this in whatever launches the AppImage on
-  // boot. kiosk:true only removes window chrome/forces fullscreen; it does
-  // NOT disable the tray "Quit", default Electron accelerators (Ctrl+Q,
-  // etc.), or OS/WM-level shortcuts -- none of those are touched here.
-  const kiosk = process.env.SAIGNES_KIOSK === '1';
+  // Opt-in via CAPO_DI_SANTA_DIONISIA_KIOSK so normal windowed dev/testing
+  // (e.g. on this machine) is unaffected -- a dedicated-hardware deployment
+  // (a Pi next to the garden, say) would set this in whatever launches the
+  // AppImage on boot. kiosk:true only removes window chrome/forces
+  // fullscreen; it does NOT disable the tray "Quit", default Electron
+  // accelerators (Ctrl+Q, etc.), or OS/WM-level shortcuts -- none of those
+  // are touched here.
+  const kiosk = process.env.CAPO_DI_SANTA_DIONISIA_KIOSK === '1';
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     icon: path.join(__dirname, 'build', 'icon.png'),
     kiosk,
-    webPreferences: { contextIsolation: true },
+    webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
   });
   if (startupError) {
     // Load an inline error page instead of the dashboard URL -- silently
@@ -146,10 +148,15 @@ function createWindow(startupError) {
   });
 }
 
+function quitApp() {
+  isQuitting = true;
+  app.quit();
+}
+
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png'));
   tray = new Tray(icon.resize({ width: 32, height: 32 }));
-  tray.setToolTip('Saignes-en-Padaine');
+  tray.setToolTip('Capo di Santa Dionisia');
   tray.setContextMenu(Menu.buildFromTemplate([
     {
       label: 'Open Dashboard', click: () => {
@@ -157,17 +164,18 @@ function createTray() {
       },
     },
     { type: 'separator' },
-    {
-      label: 'Quit', click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
+    { label: 'Quit', click: quitApp },
   ]));
   tray.on('click', () => {
     if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
   });
 }
+
+// The dashboard page itself has no other way to reach this -- see
+// preload.js's contextBridge and static/app.js's window.electronAPI check.
+// Confirmation happens on the renderer side (a plain browser confirm())
+// before this ever fires, so no dialog is needed here too.
+ipcMain.on('app-quit', quitApp);
 
 function killBackend() {
   for (const child of childProcesses) {

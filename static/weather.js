@@ -46,6 +46,333 @@ function renderLocation(location) {
     : '—';
 }
 
+// ── Sun path widget ──────────────────────────────────────────────────────────
+//
+// Entirely client-side (Date.now() + the station's lat/lon, no server round
+// trip) -- same NOAA/Spencer declination + equation-of-time series
+// weather_mqtt.py already uses for sunrise/sunset quantization, extended to
+// full elevation/azimuth. Projected orthographically from directly overhead
+// (r = cos(elevation), angle = azimuth from North) rather than
+// stereographically: that's what makes the day's path degenerate to a true
+// circle only in the polar-latitude limit and a non-circular arc everywhere
+// else, matching how the sky actually looks from above -- a stereographic
+// projection would stay a perfect circle at every latitude instead, which
+// would misrepresent it. cos(elevation) alone can't distinguish above- from
+// below-horizon (cos is symmetric), so below-horizon samples are dropped
+// explicitly rather than relying on the projected radius to exclude them.
+//
+// Both radius mappings (elevToRadiusFraction below) share one more choice,
+// independent of them: `view` ('down', the default, or 'up'). Every azimuth
+// placement in this file goes through azUnit() so the whole widget flips
+// together. 'down' is the standard map convention -- N top, E right, as if
+// looking down at the sky dome from outside it. 'up' mirrors E/W (N stays
+// top, S stays bottom) to match the convention planetarium/architectural sun
+// charts actually use when you're meant to hold the chart overhead and
+// compare it to the real sky: standing on the ground looking up, East is on
+// your left when North is ahead of you. The current-sun marker encodes the
+// same choice as a ray direction, borrowing the physics convention for a
+// vector along the viewing axis: a dot (⊙) under 'up' means the sun's ray is
+// travelling toward this viewpoint (down out of the sky onto the ground
+// you're standing on); a cross (⊗) under 'down' means it's travelling away
+// from this viewpoint (down out of the sky, past you, to the ground below).
+
+function sunDeclEqtime(date) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const n = Math.floor((date.getTime() - start) / 86400000) + 1;
+  const gamma = (2 * Math.PI / 365) * (n - 1 + 0.5);
+  const eqtime = 229.18 * (
+    0.000075
+    + 0.001868 * Math.cos(gamma)
+    - 0.032077 * Math.sin(gamma)
+    - 0.014615 * Math.cos(2 * gamma)
+    - 0.040849 * Math.sin(2 * gamma)
+  );
+  const decl = (
+    0.006918
+    - 0.399912 * Math.cos(gamma)
+    + 0.070257 * Math.sin(gamma)
+    - 0.006758 * Math.cos(2 * gamma)
+    + 0.000907 * Math.sin(2 * gamma)
+    - 0.002697 * Math.cos(3 * gamma)
+    + 0.00148 * Math.sin(3 * gamma)
+  );
+  return { decl, eqtime }; // decl in radians, eqtime in minutes
+}
+
+// Elevation/azimuth (both degrees) for a given hour angle (degrees, 0 at
+// solar noon). Azimuth measured clockwise from North.
+function elevAzFromHourAngle(latDeg, decl, haDeg) {
+  const lat = latDeg * Math.PI / 180;
+  const ha = haDeg * Math.PI / 180;
+  let cosZenith = Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(ha);
+  cosZenith = Math.max(-1, Math.min(1, cosZenith));
+  const zenith = Math.acos(cosZenith);
+  const elevation = 90 - zenith * 180 / Math.PI;
+  const sinZenith = Math.sin(zenith);
+  let az;
+  if (sinZenith < 1e-9) {
+    az = 180;
+  } else {
+    let cosAz = (Math.sin(decl) - Math.sin(lat) * cosZenith) / (Math.cos(lat) * sinZenith);
+    cosAz = Math.max(-1, Math.min(1, cosAz));
+    az = Math.acos(cosAz) * 180 / Math.PI;
+    if (haDeg > 0) az = 360 - az;
+  }
+  return { elevation, az };
+}
+
+function hourAngleNow(lonDeg, eqtime, date) {
+  const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes() + date.getUTCSeconds() / 60;
+  const tst = ((utcMin + eqtime + 4 * lonDeg) % 1440 + 1440) % 1440;
+  return tst / 4 - 180;
+}
+
+// Inverse of hourAngleNow: the station-local clock time (HH:MM) for a given
+// hour angle on refDate's UTC calendar day. Only the time-of-day is used by
+// callers (sunrise/sunset labels), never the reconstructed date -- a fixed
+// UTC offset makes the extracted hour:minute correct regardless of whether
+// this lands the instant on refDate's actual UTC day or the one next to it.
+function hourAngleToLocalClock(haDeg, lonDeg, eqtime, refDate, tzName) {
+  if (!tzName) return null;
+  const utcMin = (((haDeg + 180) * 4 - eqtime - 4 * lonDeg) % 1440 + 1440) % 1440;
+  const dayStart = Date.UTC(refDate.getUTCFullYear(), refDate.getUTCMonth(), refDate.getUTCDate());
+  const instant = new Date(dayStart + utcMin * 60000);
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: tzName, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(instant);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Fills a bg-colored box behind `text` before drawing it in fg, so it stays
+// legible regardless of whatever curve/ring/other label happens to be
+// underneath -- computing non-overlapping positions for a dynamic day-path
+// curve that changes shape with date/latitude isn't worth it when simply
+// masking out the small patch behind each label is enough. Assumes the
+// caller already set textAlign='center'/textBaseline='middle'.
+function haloText(ctx, text, x, y, fg, bg) {
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = bg;
+  ctx.fillRect(x - w / 2 - 1.5, y - 4.5, w + 3, 9);
+  ctx.fillStyle = fg;
+  ctx.fillText(text, x, y);
+}
+
+// Radius (as a 0..1 fraction of the horizon radius) for a given elevation.
+// 'linear' (equidistant/polar-equal-angle: 90deg-elev at the center down to
+// 0deg at the horizon) keeps equal elevation steps evenly spaced.
+// 'orthographic' (cos(elevation), literal bird's-eye view of the sky)
+// crowds space near the horizon and stretches it near the zenith instead.
+// Both degenerate to a true circle in the polar-latitude limit and a
+// non-circular arc otherwise -- see the config panel's "Sun path style".
+function elevToRadiusFraction(elevation, projection) {
+  return projection === 'orthographic'
+    ? Math.cos(elevation * Math.PI / 180)
+    : (1 - elevation / 90);
+}
+
+// Unit direction vector (canvas x/y, N up) for a compass azimuth, under
+// either viewing convention -- see the widget's top comment. Every azimuth
+// placement in drawSunPath (the day-path curve, ring labels, compass
+// labels, sunrise/sunset ticks, the current-sun marker) goes through this so
+// 'up' flips the whole picture consistently instead of just the curve.
+function azUnit(azDeg, view) {
+  const azRad = azDeg * Math.PI / 180;
+  const ewSign = view === 'up' ? -1 : 1;
+  return [ewSign * Math.sin(azRad), -Math.cos(azRad)];
+}
+
+// The ray-direction glyph (see the widget's top comment): a filled dot
+// under 'up' (ray toward this viewpoint), an X under 'down' (ray away from
+// it). Shared by the current-sun marker and the zenith reticule so "match
+// the sun style" is enforced by construction rather than two copies that
+// can drift -- callers only vary position/color/size. `dotRadius` sets the
+// dot's radius directly; the X's arm reach is one px more, keeping the two
+// glyphs' visual weight balanced the way a thin-stroked X needs to reach
+// slightly further than a filled dot to read as similarly prominent.
+function drawRayGlyph(ctx, px, py, view, color, dotRadius) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  if (view === 'up') {
+    ctx.beginPath();
+    ctx.arc(px, py, dotRadius, 0, 2 * Math.PI);
+    ctx.fill();
+  } else {
+    const a = dotRadius + 1;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px - a, py - a); ctx.lineTo(px + a, py + a);
+    ctx.moveTo(px - a, py + a); ctx.lineTo(px + a, py - a);
+    ctx.stroke();
+  }
+}
+
+function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const pw = canvas.parentElement ? (canvas.parentElement.clientWidth || 200) : 200;
+  const size = Math.max(160, Math.min(pw, 280));
+  const PAD = 14;
+  const R = size / 2 - PAD;
+  const cx = size / 2, cy = size / 2;
+
+  canvas.width  = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width  = size + 'px';
+  canvas.style.height = size + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const { fg, bg, hist } = getColors();
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, size, size);
+
+  if (latDeg == null || lonDeg == null) return;
+
+  const toXY = (elevation, az) => {
+    const r = R * elevToRadiusFraction(elevation, projection);
+    const [ux, uy] = azUnit(az, view);
+    return [cx + r * ux, cy + r * uy];
+  };
+
+  // All strokes (horizon, elevation rings, day-path curve, sunrise/sunset
+  // ticks) are drawn first, and every text label goes on top afterward in
+  // one final pass -- otherwise a label drawn early (e.g. the "30°" ring
+  // label) could get a later stroke (the day-path curve very often crosses
+  // that same NE-diagonal spot at some point in the year) drawn right
+  // through it, defeating its own halo. Halos only protect against what's
+  // already on the canvas, not what gets drawn afterward.
+  const labels = []; // { text, x, y, font }
+
+  // Horizon (outer boundary) + faint elevation reference rings.
+  ctx.strokeStyle = fg;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
+  ctx.setLineDash([2, 3]);
+  for (const elev of [30, 60]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * elevToRadiusFraction(elev, projection), 0, 2 * Math.PI);
+    ctx.stroke();
+    const [lx, ly] = toXY(elev, 45);
+    labels.push({ text: elev + '°', x: lx, y: ly, font: '7px monospace' });
+  }
+  ctx.setLineDash([]);
+
+  // Compass labels -- via azUnit so 'up' swaps E/W screen positions along
+  // with everything else, instead of just the curve flipping underneath
+  // fixed N/S/E/W text.
+  for (const [text, az] of [['N', 0], ['S', 180], ['E', 90], ['W', 270]]) {
+    const [ux, uy] = azUnit(az, view);
+    labels.push({ text, x: cx + ux * (R + 7), y: cy + uy * (R + 7), font: '8px monospace' });
+  }
+
+  const now = new Date();
+  const { decl, eqtime } = sunDeclEqtime(now);
+
+  // Today's path: one declination reused across the sweep (it barely moves
+  // in a day), only stroked where the sun is actually above the horizon --
+  // that's what truncates the curve at the horizon, and what leaves nothing
+  // drawn at all through a polar night, or a closed loop through a polar day.
+  // Also tracks the two horizon crossings (elevation sign change) along the
+  // way -- the unimodal elevation-vs-hour-angle curve crosses upward at most
+  // once (sunrise) and downward at most once (sunset) per day, so this
+  // single pass is enough to find both, interpolated to the exact azimuth
+  // and hour angle where elevation hits zero rather than snapping to the
+  // nearest sample.
+  ctx.strokeStyle = fg;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let drawing = false;
+  let prevElev = null, prevAz = null, prevHa = null;
+  let riseAz = null, setAz = null, riseHa = null, setHa = null;
+  for (let ha = -180; ha <= 180; ha += 2) {
+    const { elevation, az } = elevAzFromHourAngle(latDeg, decl, ha);
+    if (prevElev != null) {
+      if (prevElev < 0 && elevation >= 0) {
+        const t = -prevElev / (elevation - prevElev);
+        riseAz = prevAz + t * (az - prevAz);
+        riseHa = prevHa + t * (ha - prevHa);
+      } else if (prevElev >= 0 && elevation < 0) {
+        const t = prevElev / (prevElev - elevation);
+        setAz = prevAz + t * (az - prevAz);
+        setHa = prevHa + t * (ha - prevHa);
+      }
+    }
+    prevElev = elevation; prevAz = az; prevHa = ha;
+    if (elevation < 0) { drawing = false; continue; }
+    const [x, y] = toXY(elevation, az);
+    if (drawing) ctx.lineTo(x, y); else { ctx.moveTo(x, y); drawing = true; }
+  }
+  ctx.stroke();
+
+  // Sunrise/sunset azimuth ticks + labels (degrees + local clock time),
+  // right at the horizon.
+  for (const [rawAz, rawHa] of [[riseAz, riseHa], [setAz, setHa]]) {
+    if (rawAz == null) continue;
+    const azDeg = ((rawAz % 360) + 360) % 360;
+    const [ux, uy] = azUnit(azDeg, view);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + ux * R, cy + uy * R);
+    ctx.lineTo(cx + ux * (R + 5), cy + uy * (R + 5));
+    ctx.stroke();
+    const lx = cx + ux * (R + 12), ly = cy + uy * (R + 12);
+    const timeStr = hourAngleToLocalClock(rawHa, lonDeg, eqtime, now, stationTz);
+    labels.push({ text: Math.round(azDeg) + '°', x: lx, y: ly - (timeStr ? 5 : 0), font: '7px monospace' });
+    if (timeStr) labels.push({ text: timeStr, x: lx, y: ly + 5, font: '7px monospace' });
+  }
+
+  // Current sun position -- only when actually above the horizon, same
+  // reasoning as the path itself. Glyph encodes the viewing convention as a
+  // ray direction (see the widget's top comment and drawRayGlyph): a dot
+  // under 'up' (ray toward this viewpoint), an X under 'down' (ray away
+  // from it). Its elevation/azimuth readout is offset inward (towards the
+  // circle's center) rather than a fixed direction, so it stays inside the
+  // widget even when the sun sits right near the horizon edge.
+  const haNow = hourAngleNow(lonDeg, eqtime, now);
+  const nowPos = elevAzFromHourAngle(latDeg, decl, haNow);
+  if (nowPos.elevation >= 0) {
+    const [x, y] = toXY(nowPos.elevation, nowPos.az);
+    drawRayGlyph(ctx, x, y, view, fg, 3);
+
+    // Pulled well clear of the marker itself (not just nudged past its 4px
+    // reach) -- a short offset put the label's own halo box right on top of
+    // the marker it's meant to be labeling. Capped at 90% of the distance to
+    // the center so it can't overshoot past the center and flip to the
+    // opposite side when the sun is already close to the middle (high
+    // elevation, small radius).
+    const dx = cx - x, dy = cy - y;
+    const norm = Math.hypot(dx, dy) || 1;
+    const offset = Math.min(28, norm * 0.9);
+    const lx = x + (dx / norm) * offset, ly = y + (dy / norm) * offset;
+    labels.push({ text: `${Math.round(nowPos.elevation)}°/${Math.round(nowPos.az)}°`, x: lx, y: ly, font: '7px monospace' });
+  }
+
+  // All labels last, on top of every stroke -- drawn in the order added
+  // above, so the current-position readout (added last) wins any remaining
+  // label-vs-label overlap, e.g. right around sunrise/sunset.
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const l of labels) {
+    ctx.font = l.font;
+    haloText(ctx, l.text, l.x, l.y, fg, bg);
+  }
+
+  // Zenith reticule -- marks the exact overhead point (elevation 90, the
+  // widget's center under either projection). Same dot/X glyph as the
+  // current-sun marker (drawRayGlyph, same view-driven meaning), just
+  // bigger and in the muted --hist gray already used elsewhere for
+  // reference/historic marks rather than fg -- reads as a fixed landmark,
+  // not another live sun position. Drawn dead last, after even the labels,
+  // so it's never obscured by the day-path curve or the current-position
+  // marker passing right through the center at high-elevation times.
+  drawRayGlyph(ctx, cx, cy, view, hist, 5);
+}
+
 // ── Shared color helper (reads CSS vars so dark/light mode works) ─────────────
 
 function getColors() {
@@ -550,6 +877,7 @@ async function refresh() {
     stationTz = (data.location || {}).tz || null;
     tickLocalClock();
     renderLocation(data.location);
+    drawSunPath('chart-sun', (data.location || {}).lat, (data.location || {}).lon, data.sun_projection, data.sun_view);
 
     const irrig   = data.irrigation || {};
     const sched   = irrig.schedule  || {};
