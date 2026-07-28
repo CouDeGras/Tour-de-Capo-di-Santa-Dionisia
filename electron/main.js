@@ -133,7 +133,15 @@ function createWindow(startupError) {
         <p>Check the terminal this AppImage was launched from for details.</p></body>`
     ));
   } else {
-    mainWindow.loadURL(DASHBOARD_URL);
+    // Clear the persistent HTTP cache before every load -- the window's
+    // session survives across rebuilds (it lives in userData, not the
+    // AppImage mount), so without this a rebuilt static/template file can
+    // sit next to a stale cached one indefinitely (e.g. new HTML markup
+    // paired with old CSS that doesn't know about it). There's no upside
+    // to caching a page that only ever talks to 127.0.0.1 anyway.
+    mainWindow.webContents.session.clearCache().finally(() => {
+      mainWindow.loadURL(DASHBOARD_URL);
+    });
   }
 
   // Hide, don't quit -- the backend (specifically weather_mqtt.py --service,
