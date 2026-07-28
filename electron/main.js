@@ -120,6 +120,18 @@ function createWindow(startupError) {
     kiosk,
     webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
   });
+
+  // F11 toggles kiosk mode at runtime, on top of the CAPO_DI_SANTA_DIONISIA_KIOSK
+  // launch-time default above. Scoped to this window's own input (before-input-event)
+  // rather than globalShortcut.register, which would steal F11 system-wide even
+  // while some other app has focus.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      mainWindow.setKiosk(!mainWindow.isKiosk());
+      event.preventDefault();
+    }
+  });
+
   if (startupError) {
     // Load an inline error page instead of the dashboard URL -- silently
     // loading a blank/connection-refused page here is exactly how the
