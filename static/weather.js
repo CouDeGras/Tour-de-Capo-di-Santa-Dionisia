@@ -184,27 +184,65 @@ function azUnit(azDeg, view) {
   return [ewSign * Math.sin(azRad), -Math.cos(azRad)];
 }
 
-// The ray-direction glyph (see the widget's top comment): a filled dot
-// under 'up' (ray toward this viewpoint), an X under 'down' (ray away from
-// it). Shared by the current-sun marker and the zenith reticule so "match
-// the sun style" is enforced by construction rather than two copies that
-// can drift -- callers only vary position/color/size. `dotRadius` sets the
-// dot's radius directly; the X's arm reach is one px more, keeping the two
-// glyphs' visual weight balanced the way a thin-stroked X needs to reach
-// slightly further than a filled dot to read as similarly prominent.
-function drawRayGlyph(ctx, px, py, view, color, dotRadius) {
+// Shared by every stroke in the sun-path widget -- horizon, elevation
+// rings, the day-path curve, sunrise/sunset ticks, and the ray glyphs below
+// -- so nothing in the diagram reads as heavier or lighter than anything
+// else, regardless of how big the shape it's drawing is.
+const SUN_WIDGET_LINE_WIDTH = 1.5;
+
+// Radius shared by the current-sun marker and the zenith reticule -- also
+// used to size the current-position label's clearance from the marker (see
+// the offset calc in drawSunPath) so that clearance stays correct if this
+// ever changes.
+const SUN_GLYPH_RADIUS = 6;
+
+// The ray-direction glyph (see the widget's top comment): a disc filled in
+// the canvas's own background color -- opaque, so it occludes whatever's
+// drawn underneath it (the day-path curve very often runs right behind the
+// current-sun marker) by painting over it with the same color as the
+// canvas around it -- outlined in `color`, with a dot at its center under
+// 'up' (ray toward this viewpoint) or a cross under 'down' (ray away from
+// it), also in `color` so they read against the background-filled disc.
+// Shared by the current-sun marker and the zenith reticule so "match the
+// sun style" is enforced by construction rather than two copies that can
+// drift -- callers only vary position/color/size. `ringRadius` sets the
+// disc's radius; everything else is scaled off SUN_WIDGET_LINE_WIDTH (the
+// same width used everywhere else in the widget) so the mark stays
+// proportional to the rest of the diagram no matter how big the disc is:
+//   - the outline stroke uses that width;
+//   - the dot's diameter equals that width;
+//   - the cross's diagonal reach is set so each arm's tip lands exactly on
+//     the disc's edge (distance reach*sqrt(2) from center), so there's no
+//     gap between the cross and the rim.
+function drawRayGlyph(ctx, px, py, view, color, ringRadius, bgColor) {
+  // Snapped to the nearest half-pixel, same hairline-crispening idiom used
+  // for the grid chart's tick marks -- at this glyph's small radius, an
+  // un-snapped (sub-pixel) center spreads the disc/mark's anti-aliasing
+  // across an extra row of pixels, which is what was reading as a faint,
+  // partly-transparent mark instead of a solid opaque one.
+  px = Math.round(px) + 0.5;
+  py = Math.round(py) + 0.5;
+  const lineWidth = SUN_WIDGET_LINE_WIDTH;
+
+  ctx.fillStyle = bgColor;
   ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.arc(px, py, ringRadius, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.fillStyle = color;
+  ctx.strokeStyle = color;
   if (view === 'up') {
     ctx.beginPath();
-    ctx.arc(px, py, dotRadius, 0, 2 * Math.PI);
+    ctx.arc(px, py, lineWidth * 0.75, 0, 2 * Math.PI);
     ctx.fill();
   } else {
-    const a = dotRadius + 1;
-    ctx.lineWidth = 2;
+    const reach = ringRadius / Math.SQRT2;
     ctx.beginPath();
-    ctx.moveTo(px - a, py - a); ctx.lineTo(px + a, py + a);
-    ctx.moveTo(px - a, py + a); ctx.lineTo(px + a, py - a);
+    ctx.moveTo(px - reach, py - reach); ctx.lineTo(px + reach, py + reach);
+    ctx.moveTo(px - reach, py + reach); ctx.lineTo(px + reach, py - reach);
     ctx.stroke();
   }
 }
@@ -214,8 +252,8 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
   if (!canvas) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const pw = canvas.parentElement ? (canvas.parentElement.clientWidth || 200) : 200;
-  const size = Math.max(160, Math.min(pw, 280));
-  const PAD = 14;
+  const size = Math.max(200, Math.min(pw, 350));
+  const PAD = 18;
   const R = size / 2 - PAD;
   const cx = size / 2, cy = size / 2;
 
@@ -249,7 +287,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
 
   // Horizon (outer boundary) + faint elevation reference rings.
   ctx.strokeStyle = fg;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = SUN_WIDGET_LINE_WIDTH;
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
   ctx.setLineDash([2, 3]);
   for (const elev of [30, 60]) {
@@ -257,7 +295,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
     ctx.arc(cx, cy, R * elevToRadiusFraction(elev, projection), 0, 2 * Math.PI);
     ctx.stroke();
     const [lx, ly] = toXY(elev, 45);
-    labels.push({ text: elev + '°', x: lx, y: ly, font: '7px monospace' });
+    labels.push({ text: elev + '°', x: lx, y: ly, font: '9px monospace' });
   }
   ctx.setLineDash([]);
 
@@ -266,7 +304,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
   // fixed N/S/E/W text.
   for (const [text, az] of [['N', 0], ['S', 180], ['E', 90], ['W', 270]]) {
     const [ux, uy] = azUnit(az, view);
-    labels.push({ text, x: cx + ux * (R + 7), y: cy + uy * (R + 7), font: '8px monospace' });
+    labels.push({ text, x: cx + ux * (R + 7), y: cy + uy * (R + 7), font: '10px monospace' });
   }
 
   const now = new Date();
@@ -283,7 +321,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
   // and hour angle where elevation hits zero rather than snapping to the
   // nearest sample.
   ctx.strokeStyle = fg;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = SUN_WIDGET_LINE_WIDTH;
   ctx.beginPath();
   let drawing = false;
   let prevElev = null, prevAz = null, prevHa = null;
@@ -315,41 +353,48 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
     const azDeg = ((rawAz % 360) + 360) % 360;
     const [ux, uy] = azUnit(azDeg, view);
     ctx.strokeStyle = fg;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = SUN_WIDGET_LINE_WIDTH;
     ctx.beginPath();
     ctx.moveTo(cx + ux * R, cy + uy * R);
     ctx.lineTo(cx + ux * (R + 5), cy + uy * (R + 5));
     ctx.stroke();
     const lx = cx + ux * (R + 12), ly = cy + uy * (R + 12);
     const timeStr = hourAngleToLocalClock(rawHa, lonDeg, eqtime, now, stationTz);
-    labels.push({ text: Math.round(azDeg) + '°', x: lx, y: ly - (timeStr ? 5 : 0), font: '7px monospace' });
-    if (timeStr) labels.push({ text: timeStr, x: lx, y: ly + 5, font: '7px monospace' });
+    labels.push({ text: Math.round(azDeg) + '°', x: lx, y: ly - (timeStr ? 5 : 0), font: '9px monospace' });
+    if (timeStr) labels.push({ text: timeStr, x: lx, y: ly + 5, font: '9px monospace' });
   }
 
   // Current sun position -- only when actually above the horizon, same
   // reasoning as the path itself. Glyph encodes the viewing convention as a
-  // ray direction (see the widget's top comment and drawRayGlyph): a dot
-  // under 'up' (ray toward this viewpoint), an X under 'down' (ray away
-  // from it). Its elevation/azimuth readout is offset inward (towards the
-  // circle's center) rather than a fixed direction, so it stays inside the
+  // ray direction (see the widget's top comment and drawRayGlyph): a ring
+  // with a dot under 'up' (ray toward this viewpoint), a ring with a cross
+  // under 'down' (ray away from it). Its elevation/azimuth readout is
+  // offset inward (towards the circle's center) rather than a fixed
+  // direction, so it stays inside the
   // widget even when the sun sits right near the horizon edge.
   const haNow = hourAngleNow(lonDeg, eqtime, now);
   const nowPos = elevAzFromHourAngle(latDeg, decl, haNow);
   if (nowPos.elevation >= 0) {
     const [x, y] = toXY(nowPos.elevation, nowPos.az);
-    drawRayGlyph(ctx, x, y, view, fg, 3);
+    drawRayGlyph(ctx, x, y, view, fg, SUN_GLYPH_RADIUS, bg);
 
-    // Pulled well clear of the marker itself (not just nudged past its 4px
-    // reach) -- a short offset put the label's own halo box right on top of
-    // the marker it's meant to be labeling. Capped at 90% of the distance to
-    // the center so it can't overshoot past the center and flip to the
-    // opposite side when the sun is already close to the middle (high
-    // elevation, small radius).
+    // Pulled clear of the marker itself along the same direction -- towards
+    // the zenith at the widget's center -- rather than a fixed screen
+    // direction, so the label always reads on the side of the marker
+    // that's guaranteed to be inside the widget. A fraction of the sky
+    // globe's own radius R (not the marker's radius), so the offset scales
+    // with the whole widget as it resizes rather than staying pinned to the
+    // marker's fixed size. Applied unconditionally, regardless of how close
+    // the sun already is to the zenith -- unlike a distance-to-center cap,
+    // this can't shrink toward zero and let the label land on the marker's
+    // opaque, occluding disc; it just overshoots straight past the zenith
+    // point when the sun is that close, which is fine since nothing else is
+    // drawn there for it to land on.
     const dx = cx - x, dy = cy - y;
     const norm = Math.hypot(dx, dy) || 1;
-    const offset = Math.min(28, norm * 0.9);
+    const offset = R * 0.3;
     const lx = x + (dx / norm) * offset, ly = y + (dy / norm) * offset;
-    labels.push({ text: `${Math.round(nowPos.elevation)}°/${Math.round(nowPos.az)}°`, x: lx, y: ly, font: '7px monospace' });
+    labels.push({ text: `${Math.round(nowPos.elevation)}°/${Math.round(nowPos.az)}°`, x: lx, y: ly, font: '9px monospace' });
   }
 
   // All labels last, on top of every stroke -- drawn in the order added
@@ -363,14 +408,14 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
   }
 
   // Zenith reticule -- marks the exact overhead point (elevation 90, the
-  // widget's center under either projection). Same dot/X glyph as the
-  // current-sun marker (drawRayGlyph, same view-driven meaning), just
-  // bigger and in the muted --hist gray already used elsewhere for
+  // widget's center under either projection). Same ring+dot/cross glyph and
+  // size as the current-sun marker (drawRayGlyph, same view-driven meaning),
+  // just in the muted --hist gray already used elsewhere for
   // reference/historic marks rather than fg -- reads as a fixed landmark,
   // not another live sun position. Drawn dead last, after even the labels,
   // so it's never obscured by the day-path curve or the current-position
   // marker passing right through the center at high-elevation times.
-  drawRayGlyph(ctx, cx, cy, view, hist, 5);
+  drawRayGlyph(ctx, cx, cy, view, hist, SUN_GLYPH_RADIUS, bg);
 }
 
 // ── Shared color helper (reads CSS vars so dark/light mode works) ─────────────

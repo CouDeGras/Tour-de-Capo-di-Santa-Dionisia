@@ -1,7 +1,7 @@
 {
   "station": "ZSSS",
   "broker": "broker.emqx.io:1883",
-  "root_topic": "tour_genoise/capo_di_santa_dionisia",
+  "root_topic": "tour_genoise_de_capo_di_santa_dionisia",
   "mqtt_pub_password": "69PcHBSZ5k9#@h~",
   "lang": "en",
   "sun_projection": "orthographic",

@@ -84,20 +84,21 @@ MQTT_KEEPALIVE_SECONDS = 30
 MQTT_USERNAME = None        # set if your broker needs auth
 MQTT_PASSWORD = None
 
-# AES-128-CBC key for the pub-topic payload, derived from a human-typed
-# passphrase rather than requiring someone to paste a random base64 key:
-# key = MD5(password) (see mqtt_pub_password_to_key() below) -- MD5 is a
-# convenient fit only because its 16-byte digest happens to be exactly an
-# AES-128 key's length, NOT for any cryptographic property. A plain,
-# unsalted, unstretched hash of a human-memorable password is guessable by
-# brute force far faster than a real KDF (PBKDF2/scrypt/argon2) would allow
-# -- acceptable here (a hobby irrigation controller, not a system with a
-# real threat model), not a pattern to copy into anything higher-stakes.
-# site_config.json's "mqtt_pub_password" field, set via
-# refresh_site_config_overrides() below. None means "not configured yet":
-# publish_mqtt_schedule() falls back to plaintext JSON and warns loudly, so
-# a fresh checkout / pre-firmware-rollout deployment keeps working. The ack
-# topic (pump -> dashboard) is unencrypted for now; see MQTT_TOPIC_ACK.
+# AES-128-CBC key for both the pub-topic AND ack-topic payloads (same key,
+# same scheme both directions), derived from a human-typed passphrase rather
+# than requiring someone to paste a random base64 key: key = MD5(password)
+# (see mqtt_pub_password_to_key() below) -- MD5 is a convenient fit only
+# because its 16-byte digest happens to be exactly an AES-128 key's length,
+# NOT for any cryptographic property. A plain, unsalted, unstretched hash of
+# a human-memorable password is guessable by brute force far faster than a
+# real KDF (PBKDF2/scrypt/argon2) would allow -- acceptable here (a hobby
+# irrigation controller, not a system with a real threat model), not a
+# pattern to copy into anything higher-stakes. site_config.json's
+# "mqtt_pub_password" field, set via refresh_site_config_overrides() below.
+# None means "not configured yet": publish_mqtt_schedule() falls back to
+# plaintext JSON and warns loudly (and _on_ack_message() expects plaintext
+# JSON acks to match), so a fresh checkout / pre-firmware-rollout deployment
+# keeps working.
 MQTT_PUB_AES_KEY: Optional[bytes] = None
 
 
@@ -223,21 +224,6 @@ OWM_APPID = os.getenv("OWM_APPID", "4fb277504a118b9320ba6378abbdaf71")
 
 OPEN_METEO_API_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_FORECAST_DAYS = 10  # covers HOURS_AHEAD=120 with margin; no API key needed
-
-# Reverse-geocodes an airport's coordinates to a human place name (e.g.
-# "Changning District, Shanghai, China") for display, instead of the
-# aviationweather.gov site name (an airport terminal name, e.g. "Shanghai
-# Hongqiao Intl"). zoom=8 (district-level) rather than something more precise
-# -- an airport's exact coordinates sit outside town centers, so a tighter
-# zoom (suburb/village level) occasionally resolves to an obscure hamlet name
-# or one with no English translation at all, where district-level always
-# reads as a sensible, stable place name. See resolve_station_geo().
-NOMINATIM_API_URL = "https://nominatim.openstreetmap.org/reverse"
-NOMINATIM_USER_AGENT = os.getenv(
-    "NOMINATIM_USER_AGENT",
-    "capo-di-santa-dionisia-irrigation-dashboard/1.0 (contact: yisu.fang@outlook.com)",
-)
-NOMINATIM_ZOOM = 8
 
 TIMEOUT_SECONDS = 20
 HOURS_AHEAD = 120
@@ -366,27 +352,6 @@ def _load_station_geo_cache() -> Dict[str, Any]:
     return _load_json_dict(STATION_GEO_CACHE_JSON)
 
 
-def reverse_geocode_place_name(session: requests.Session, lat: float, lon: float, fallback: str) -> str:
-    """Nominatim reverse geocode of (lat, lon) to a human place name (e.g.
-    "Changning District, Shanghai, China"), for display in place of an
-    airport's own terminal name. Best-effort: any failure (network,
-    timeout, malformed response) returns `fallback` rather than raising --
-    this is a cosmetic display string, not something that should ever block
-    station resolution the way a missing lat/lon would."""
-    try:
-        resp = session.get(
-            NOMINATIM_API_URL,
-            params={"format": "jsonv2", "lat": lat, "lon": lon, "zoom": NOMINATIM_ZOOM, "accept-language": "en"},
-            headers={"User-Agent": NOMINATIM_USER_AGENT},
-            timeout=TIMEOUT_SECONDS,
-        )
-        if resp.status_code != 200:
-            return fallback
-        return str(resp.json().get("display_name") or fallback)
-    except Exception:
-        return fallback
-
-
 def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
     """Resolve an ICAO airport code to (lat, lon, tz_name, display_name).
 
@@ -401,42 +366,18 @@ def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
     fetch_metar_rain_with_retry / metar_latest_observation). tz_name is
     reverse-geocoded from that point via Open-Meteo's timezone=auto (free,
     no key, already used elsewhere in this file for forecasts). display_name
-    is a Nominatim reverse geocode of the same point (see
-    reverse_geocode_place_name) -- a real place name reads better than an
-    airport terminal name -- falling back to the airport's own site/country
-    if that lookup fails. Successful lookups are cached in
-    STATION_GEO_CACHE_JSON keyed by station_id -- airport coordinates don't
-    move, so this network round trip only needs to happen once per airport
-    rather than on every 3-hourly/hourly run. Cache entries written before
-    Nominatim was added lack "name_source", which forces exactly one
-    re-resolution to upgrade them rather than trusting the old airport-name
-    entry forever."""
+    is derived straight from stationinfo's own "site" field (e.g.
+    "Shanghai/Hongqiao" -> "Shanghai") instead of a Nominatim reverse
+    geocode -- the part before the slash is the city, the part after is the
+    specific airport/terminal, which is more detail than this display needs.
+    Successful lookups are cached in STATION_GEO_CACHE_JSON keyed by
+    station_id -- airport coordinates don't move, so this network round trip
+    only needs to happen once per airport rather than on every
+    3-hourly/hourly run."""
     cache = _load_station_geo_cache()
     cached = cache.get(station_id)
-    if cached and cached.get("name_source") == "nominatim":
-        return float(cached["lat"]), float(cached["lon"]), str(cached["tz"]), str(cached["name"])
-
     if cached:
-        # Upgrade path: lat/lon/tz are already known -- re-fetching them from
-        # stationinfo/Open-Meteo just to backfill the missing name_source
-        # marker would make an already-working cached station newly
-        # vulnerable to failing on either of those calls for no reason (this
-        # is exactly what happened the first time: Open-Meteo's tz lookup
-        # hit a transient error, and a station that used to resolve
-        # instantly from cache fell all the way back to the hardcoded
-        # DEFAULT_LAT/DEFAULT_LON emergency fallback instead). Only the one
-        # new call this upgrade actually needs -- Nominatim -- runs here.
-        lat, lon, tz_name = float(cached["lat"]), float(cached["lon"]), str(cached["tz"])
-        with requests.Session() as session:
-            session.headers.update({"Connection": "close"})
-            name = reverse_geocode_place_name(session, lat, lon, fallback=str(cached["name"]))
-        cache[station_id] = {
-            "lat": lat, "lon": lon, "tz": tz_name, "name": name,
-            "name_source": "nominatim",
-            "resolved_at_epoch": int(time.time()),
-        }
-        atomic_write_json(STATION_GEO_CACHE_JSON, cache)
-        return lat, lon, tz_name, name
+        return float(cached["lat"]), float(cached["lon"]), str(cached["tz"]), str(cached["name"])
 
     with requests.Session() as session:
         session.headers.update({"Connection": "close"})
@@ -453,9 +394,7 @@ def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
             raise RuntimeError(f"stationinfo for '{station_id}' has no lat/lon")
         lat, lon = float(info["lat"]), float(info["lon"])
         site = str(info.get("site") or station_id)
-        country = str(info.get("country") or "")
-        airport_name = f"{site}, {country}" if country else site
-        name = reverse_geocode_place_name(session, lat, lon, fallback=airport_name)
+        name = site.split("/", 1)[0].strip() or station_id
 
         tz_resp = session.get(
             OPEN_METEO_API_URL,
@@ -468,7 +407,6 @@ def resolve_station_geo(station_id: str) -> Tuple[float, float, str, str]:
 
     cache[station_id] = {
         "lat": lat, "lon": lon, "tz": tz_name, "name": name,
-        "name_source": "nominatim",
         "resolved_at_epoch": int(time.time()),
     }
     atomic_write_json(STATION_GEO_CACHE_JSON, cache)
@@ -721,9 +659,10 @@ def encrypt_pub_payload(plaintext: bytes, key: bytes) -> bytes:
     format is deliberately the simplest thing an embedded AES library
     (mbedTLS, ESP32's own crypto, etc.) can decrypt: base64-decode, split
     off the first 16 bytes as the IV, AES-128-CBC-decrypt the rest, strip
-    PKCS7 padding. No authentication tag (that's GCM, not CBC) -- the ack
-    topic's own encryption pass can revisit that if forged/tampered pump
-    commands become a real threat model here."""
+    PKCS7 padding. No authentication tag (that's GCM, not CBC) -- fine for
+    the same reason it's fine on the ack topic's own decrypt_ack_payload:
+    a hobby irrigation controller without a real forged/tampered-command
+    threat model, not a pattern to copy into anything higher-stakes."""
     if _AesCipher is None:
         raise RuntimeError(
             "the 'cryptography' package is not installed; run 'pip install cryptography' "
@@ -735,6 +674,26 @@ def encrypt_pub_payload(plaintext: bytes, key: bytes) -> bytes:
     encryptor = _AesCipher(_aes_algorithms.AES(key), _aes_modes.CBC(iv)).encryptor()
     ciphertext = encryptor.update(padded) + encryptor.finalize()
     return base64.b64encode(iv + ciphertext)
+
+
+def decrypt_ack_payload(wire_payload: bytes, key: bytes) -> bytes:
+    """Reverse of encrypt_pub_payload, for the ack topic (pump -> dashboard) --
+    now using the identical key=MD5(password) / AES-128-CBC / base64(iv ||
+    ciphertext) wire format as the pub topic, instead of the old plaintext-
+    JSON-with-the-full-schedule-echoed-back ack shape. base64-decode, split
+    the first 16 bytes off as the IV, AES-128-CBC-decrypt the rest, strip
+    PKCS7 padding."""
+    if _AesCipher is None:
+        raise RuntimeError(
+            "the 'cryptography' package is not installed; run 'pip install cryptography' "
+            "to enable MQTT payload decryption."
+        )
+    raw = base64.b64decode(wire_payload)
+    iv, ciphertext = raw[:16], raw[16:]
+    decryptor = _AesCipher(_aes_algorithms.AES(key), _aes_modes.CBC(iv)).decryptor()
+    padded = decryptor.update(ciphertext) + decryptor.finalize()
+    unpadder = _aes_padding.PKCS7(_aes_algorithms.AES.block_size).unpadder()
+    return unpadder.update(padded) + unpadder.finalize()
 
 
 def publish_mqtt_schedule(payload: Dict[str, Any]) -> str:
@@ -813,9 +772,22 @@ def _on_ack_message(_client, _userdata, msg) -> None:
     (so it can show acks arriving over time, not just the latest per node).
     Best-effort: a malformed payload or a write race is logged and dropped,
     never raised (this runs on paho's network thread).
+
+    The wire payload is now the same key=MD5(password) / AES-128-CBC /
+    base64(iv || ciphertext) scheme as the pub topic (see decrypt_ack_payload)
+    instead of plaintext JSON with the full schedule echoed back -- the
+    decrypted body carries an "md5" field (a hash of what the pump received)
+    rather than the payload itself, so a corrupted/mismatched delivery still
+    shows up without the ack needing to repeat the whole schedule back over
+    the air. Falls back to plaintext JSON when MQTT_PUB_AES_KEY isn't
+    configured, matching publish_mqtt_schedule's own pre-encryption fallback.
     """
     try:
-        ack = json.loads(msg.payload.decode("utf-8"))
+        if MQTT_PUB_AES_KEY is not None:
+            body = decrypt_ack_payload(msg.payload, MQTT_PUB_AES_KEY)
+        else:
+            body = msg.payload
+        ack = json.loads(body.decode("utf-8"))
     except Exception as e:
         print(f"WARNING: dropped malformed ACK payload ({type(e).__name__}: {e})", file=sys.stderr)
         return
@@ -837,7 +809,10 @@ def _on_ack_message(_client, _userdata, msg) -> None:
         print(f"WARNING: could not persist pump ack ({type(e).__name__}: {e})", file=sys.stderr)
         return
 
-    print(f"MQTT: ACK from {device_id} (executed={ack.get('executed')})", file=sys.stderr)
+    print(
+        f"MQTT: ACK from {device_id} (executed={ack.get('executed')}, md5={ack.get('md5')})",
+        file=sys.stderr,
+    )
 
 
 def start_ack_subscriber() -> Optional["_mqtt_client.Client"]:
@@ -3055,6 +3030,7 @@ def fetch_source_with_retry(
     now_utc: datetime,
     horizon_h: int,
     cache_path: str,
+    station_id: str,
     attempts: int = FETCH_RETRY_ATTEMPTS,
     wait_seconds: float = FETCH_RETRY_WAIT_SECONDS,
 ) -> Tuple[Optional[List["Row"]], Optional[str]]:
@@ -3064,7 +3040,17 @@ def fetch_source_with_retry(
     outage shows the last known-good forecast instead of a blank chart.
     Returns (rows, error_message) -- error_message is set whenever the LIVE
     fetch failed, even if a stale fallback filled rows in, so the dashboard's
-    status dot still reflects the real live-fetch outcome."""
+    status dot still reflects the real live-fetch outcome.
+
+    The cache is a dict keyed by station_id rather than one flat payload --
+    same reasoning as fetch_metar_rain_with_retry's cache: a naive
+    single-slot cache would silently serve a *different, previously-
+    configured* station's last known-good forecast after switching airports
+    (e.g. a transient timeout on the very first live fetch for the new
+    station), making the dashboard look like the station switch didn't do
+    anything. Keying by station means a station with no prior successful
+    fetch has nothing to fall back to, and honestly reports failure
+    instead."""
     last_err: Optional[str] = None
     for attempt in range(1, attempts + 1):
         try:
@@ -3072,7 +3058,9 @@ def fetch_source_with_retry(
             rows = extract_fn(payload, now_utc=now_utc, horizon_h=horizon_h)
             if rows:
                 try:
-                    atomic_write_json(cache_path, payload)
+                    cache = _load_json_dict(cache_path)
+                    cache[station_id] = payload
+                    atomic_write_json(cache_path, cache)
                 except Exception as e:
                     print(f"WARNING: could not cache {source_name} payload ({type(e).__name__}: {e})", file=sys.stderr)
                 return rows, None
@@ -3088,15 +3076,15 @@ def fetch_source_with_retry(
             )
             time.sleep(wait_seconds)
 
-    p = Path(cache_path).expanduser().resolve()
-    if p.exists():
+    cached_payload = _load_json_dict(cache_path).get(station_id)
+    if cached_payload is not None:
         try:
-            cached_payload = json.loads(p.read_text(encoding="utf-8"))
             fallback_rows = extract_fn(cached_payload, now_utc=now_utc, horizon_h=horizon_h)
             if fallback_rows:
                 print(
                     f"WARNING: {source_name} failed after {attempts} attempts ({last_err}); "
-                    f"falling back to last cached forecast ({len(fallback_rows)} rows still ahead of now).",
+                    f"falling back to last cached forecast for {station_id} "
+                    f"({len(fallback_rows)} rows still ahead of now).",
                     file=sys.stderr,
                 )
                 return fallback_rows, f"{last_err} (showing cached forecast)"
@@ -3262,17 +3250,17 @@ def run_once(args) -> None:
             yr_rows, yr_err = fetch_source_with_retry(
                 "Yr.no", fetch_yr_forecast, extract_rows_yr_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["Yr.no"],
+                SOURCE_PAYLOAD_CACHE["Yr.no"], location.station or DEFAULT_STATION,
             )
             owm_rows, owm_err = fetch_source_with_retry(
                 "OWM", fetch_owm_forecast, extract_rows_owm_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["OWM"],
+                SOURCE_PAYLOAD_CACHE["OWM"], location.station or DEFAULT_STATION,
             )
             om_rows, om_err = fetch_source_with_retry(
                 "Open-Meteo", fetch_open_meteo_forecast, extract_rows_open_meteo_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["Open-Meteo"],
+                SOURCE_PAYLOAD_CACHE["Open-Meteo"], location.station or DEFAULT_STATION,
             )
             recent_rain_mm, current_obs, metar_err = fetch_metar_rain_with_retry(
                 session, location.station or DEFAULT_STATION, now_utc, METAR_RAIN_LOOKBACK_HOURS,
@@ -3461,17 +3449,17 @@ def run_fetch_only(args) -> int:
             yr_rows, yr_err = fetch_source_with_retry(
                 "Yr.no", fetch_yr_forecast, extract_rows_yr_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["Yr.no"],
+                SOURCE_PAYLOAD_CACHE["Yr.no"], location.station or DEFAULT_STATION,
             )
             owm_rows, owm_err = fetch_source_with_retry(
                 "OWM", fetch_owm_forecast, extract_rows_owm_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["OWM"],
+                SOURCE_PAYLOAD_CACHE["OWM"], location.station or DEFAULT_STATION,
             )
             om_rows, om_err = fetch_source_with_retry(
                 "Open-Meteo", fetch_open_meteo_forecast, extract_rows_open_meteo_with_cumulative,
                 session, location.lat, location.lon, now_utc, HOURS_AHEAD,
-                SOURCE_PAYLOAD_CACHE["Open-Meteo"],
+                SOURCE_PAYLOAD_CACHE["Open-Meteo"], location.station or DEFAULT_STATION,
             )
             _recent_rain_mm, current_obs, metar_err = fetch_metar_rain_with_retry(
                 session, location.station or DEFAULT_STATION, now_utc, METAR_RAIN_LOOKBACK_HOURS,

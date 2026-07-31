@@ -95,6 +95,18 @@ async function triggerFullRefresh() {
   const saveBtn = document.getElementById('config-save');
   if (!overlay || !openBtn) return;
 
+  // Two tabs share one form/save button -- General (lang, sun path display)
+  // and Station (the METAR/MQTT fields that actually talk to the physical
+  // station). Both are only reachable from the one gear icon; the header's
+  // station nav link goes to the separate /stations page instead.
+  const tabBtns = overlay.querySelectorAll('.config-tab-btn');
+  const tabPanels = overlay.querySelectorAll('.config-tab');
+  const showTab = (name) => {
+    for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
+    for (const p of tabPanels) p.classList.toggle('active', p.dataset.tab === name);
+  };
+  for (const b of tabBtns) b.addEventListener('click', () => showTab(b.dataset.tab));
+
   const fields = {
     station: document.getElementById('cfg-station'),
     broker: document.getElementById('cfg-broker'),
@@ -115,7 +127,6 @@ async function triggerFullRefresh() {
     fields.station.setSelectionRange(start, start);
   });
 
-  const open = () => overlay.classList.remove('hidden');
   const close = () => overlay.classList.add('hidden');
 
   // Captured on open so save can tell whether the station actually changed
@@ -124,8 +135,9 @@ async function triggerFullRefresh() {
   // e.g. sun path style, which just needs a re-read of already-cached data).
   let openedStation = '';
 
-  openBtn.addEventListener('click', async () => {
-    open();
+  const openOnTab = async (tab) => {
+    showTab(tab);
+    overlay.classList.remove('hidden');
     try {
       const res = await fetch('/api/config');
       const cfg = await res.json();
@@ -139,7 +151,9 @@ async function triggerFullRefresh() {
     } catch (err) {
       console.error('Error loading config:', err);
     }
-  });
+  };
+
+  openBtn.addEventListener('click', () => openOnTab('general'));
   closeBtn.addEventListener('click', close);
   cancelBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });

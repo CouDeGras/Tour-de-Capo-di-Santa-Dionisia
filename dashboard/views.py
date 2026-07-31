@@ -43,6 +43,11 @@ def irrigation_page(request):
 
 
 @require_GET
+def stations_page(request):
+    return _render_page(request, "stations.html", "stations")
+
+
+@require_GET
 def api_status(request):
     return _no_store(JsonResponse(services.api_status(), safe=False, **_JSON_PARAMS))
 
