@@ -42,13 +42,6 @@ header {
 .page-nav a:hover { opacity: 0.8; }
 .page-nav a.active { opacity: 1; border-bottom-color: var(--b); }
 
-/* ── Badges ── */
-.badge {
-  padding: 0.22rem 0.66rem;
-  border: 1px solid var(--b);
-  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  background: var(--w); color: var(--b);
-}
 .hidden { display: none !important; }
 
 /* ── Icon button (header config trigger, modal close) ── */
@@ -172,6 +165,14 @@ header {
 }
 .switch input:focus-visible ~ .switch-track { outline: 2px solid var(--b); outline-offset: 2px; }
 .switch:hover .switch-track { opacity: 0.85; }
+
+/* ── Config danger zone (clear cache) ── */
+.config-danger {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.9rem;
+  margin-top: 1.2rem; padding-top: 1.2rem;
+  border-top: 1px solid var(--b);
+}
+.config-danger .config-field-hint { max-width: 20rem; }
 
 .config-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
 .btn {

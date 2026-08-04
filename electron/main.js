@@ -197,6 +197,21 @@ function createTray() {
 // before this ever fires, so no dialog is needed here too.
 ipcMain.on('app-quit', quitApp);
 
+// Settings panel's "Clear cache" button (static/app.js): clears the
+// window's own HTTP cache and storage (localStorage/IndexedDB/cookies) --
+// the same session mainWindow.webContents.session.clearCache() already
+// wipes on every load in createWindow() above, just triggered on demand
+// instead of only at startup, plus clearStorageData for anything the page
+// itself wrote client-side. Handle (not on) since the renderer awaits this
+// before reloading -- clearing storage out from under a still-loaded page
+// would be a bad time to skip synchronizing.
+ipcMain.handle('clear-cache', async () => {
+  if (!mainWindow) return;
+  const ses = mainWindow.webContents.session;
+  await ses.clearCache();
+  await ses.clearStorageData();
+});
+
 function killBackend() {
   for (const child of childProcesses) {
     if (!child.killed) child.kill('SIGTERM');

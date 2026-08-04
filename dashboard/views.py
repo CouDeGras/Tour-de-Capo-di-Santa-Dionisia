@@ -91,3 +91,9 @@ def api_refresh(request):
     except RuntimeError as e:
         return HttpResponse(str(e), status=502, content_type="text/plain")
     return _no_store(JsonResponse(data, safe=False, **_JSON_PARAMS))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_clear_cache(request):
+    return _no_store(JsonResponse(services.api_clear_cache(), safe=False, **_JSON_PARAMS))

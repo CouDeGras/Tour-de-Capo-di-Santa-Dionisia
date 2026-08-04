@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/acks", views.api_acks, name="api-acks"),
     path("api/config", views.api_config, name="api-config"),
     path("api/refresh", views.api_refresh, name="api-refresh"),
+    path("api/clear-cache", views.api_clear_cache, name="api-clear-cache"),
 ]

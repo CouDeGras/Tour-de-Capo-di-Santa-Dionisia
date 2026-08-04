@@ -37,7 +37,6 @@
     </a>
   </nav>
   <div class="hdr-right">
-    <span id="demo-badge" class="badge hidden">DEMO</span>
     <button id="refresh-btn" class="icon-btn" type="button" aria-label="{{ t.refresh_title }}" title="{{ t.refresh_title }}">
       <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
         <path d="M0 0h24v24H0z" fill="none" />
@@ -134,6 +133,21 @@
         <input type="text" id="cfg-aes-key" autocomplete="off" spellcheck="false">
         <span class="config-field-hint">{{ t.field_aes_key_hint }}</span>
       </label>
+    </div>
+    <!-- Shown regardless of the active General/Station tab above -- clearing
+         the cache isn't scoped to either one, it wipes all fetched/derived
+         state at once (see dashboard/services.py's api_clear_cache). -->
+    <div class="config-danger">
+      <div class="config-field">
+        <span class="config-field-label">{{ t.field_clear_cache }}</span>
+        <span class="config-field-hint">{{ t.field_clear_cache_hint }}</span>
+      </div>
+      <button id="config-clear-cache" class="icon-btn" type="button" aria-label="{{ t.field_clear_cache }}" title="{{ t.field_clear_cache }}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+          <path d="M0 0h24v24H0z" fill="none" />
+          <path fill="currentColor" d="M15 13h1.5v2.82l2.44 1.41l-.75 1.3L15 16.69zm8 3c0 3.87-3.13 7-7 7c-1.91 0-3.64-.76-4.9-2H8c-1.1 0-2-.9-2-2V7h12v2.29c2.89.86 5 3.54 5 6.71m-7-5c-2.76 0-5 2.24-5 5s2.24 5 5 5s5-2.24 5-5s-2.24-5-5-5m3-7v2H5V4h3.5l1-1h5l1 1z" />
+        </svg>
+      </button>
     </div>
     <div class="config-actions">
       <button id="config-cancel" class="btn btn-outline" type="button">{{ t.btn_cancel }}</button>

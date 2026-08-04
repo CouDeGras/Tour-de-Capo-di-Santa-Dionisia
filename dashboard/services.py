@@ -9,11 +9,9 @@ writes them directly via the same models, sharing one schema definition
 instead of this module hand-parsing CSV rows weather_mqtt.py hand-wrote.
 """
 import json
-import math
 import re
 import subprocess
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -33,8 +31,8 @@ BASE_DIR = settings.BASE_DIR
 # the read-only mount, which gets a fresh random location every single
 # launch (/tmp/.mount_XXXXXX/...) -- so this always looked for
 # weather_cache.json in a directory that was both wrong and different every
-# time, permanently stuck in demo mode regardless of how much real data
-# weather_mqtt.py correctly wrote to the actual persistent
+# time, permanently stuck showing an empty dashboard regardless of how much
+# real data weather_mqtt.py correctly wrote to the actual persistent
 # CAPO_DI_SANTA_DIONISIA_DATA_DIR.
 DATA_DIR = settings.DATA_DIR / "data"
 
@@ -45,6 +43,23 @@ SITE_CONFIG = DATA_DIR / "site_config.json"
 SITE_CONFIG_FIELDS = ("station", "broker", "root_topic", "lang", "sun_projection", "sun_view", "mqtt_pub_password")
 WEATHER_MQTT_SCRIPT = BASE_DIR / "weather_mqtt.py"
 REFRESH_TIMEOUT_SECONDS = 90
+
+# Every file under data/ EXCEPT site_config.json -- that one holds explicit
+# user settings (station/broker/lang/etc, the config panel's own fields),
+# not derived/fetched state, so "clear cache" must leave it alone. Everything
+# else here is either a weather_mqtt.py-written cache that regenerates on
+# the next scheduled/manual fetch (weather_cache.json, next_watering.json,
+# station_geo_cache.json, last_ok_*.json, weather.txt) or accumulated device
+# ack history (pump_acks.json) -- all safe to drop.
+CACHE_FILES = (
+    WEATHER_CACHE, NEXT_WATERING, PUMP_ACKS,
+    DATA_DIR / "station_geo_cache.json",
+    DATA_DIR / "last_ok_metar.json",
+    DATA_DIR / "last_ok_om.json",
+    DATA_DIR / "last_ok_owm.json",
+    DATA_DIR / "last_ok_yr.json",
+    DATA_DIR / "weather.txt",
+)
 
 HISTORIC_DAYS = 3
 HISTORIC_BUCKET_HOURS = 3
@@ -148,17 +163,21 @@ def _historic_rows(tz_name: str, station: str) -> list:
 
 
 def api_status() -> dict:
+    # No demo/placeholder fallback -- before the first successful
+    # weather_mqtt.py fetch (a genuine first run, or right after the
+    # settings panel's "Clear cache" wipes weather_cache.json), `data` just
+    # stays {} and every field below defaults the same honest way it would
+    # for a real cache missing that particular key. The frontend already
+    # renders every one of these as a blank/dash/empty-state (see
+    # weather.js's renderMetrics/renderLocation, irrigation.js's
+    # I18N.no_history/no_acks) since a partially-stale real cache can leave
+    # individual fields missing too -- there's no field here that's only
+    # ever absent in the theoretical "brand new install" case.
     site_cfg = api_config_get()
     sun_projection = site_cfg.get("sun_projection", DEFAULT_SUN_PROJECTION)
     sun_view = site_cfg.get("sun_view", DEFAULT_SUN_VIEW)
 
-    if not WEATHER_CACHE.exists():
-        data = _demo_status()
-        data["sun_projection"] = sun_projection
-        data["sun_view"] = sun_view
-        return data
-
-    data = json.loads(WEATHER_CACHE.read_text(encoding="utf-8"))
+    data = json.loads(WEATHER_CACHE.read_text(encoding="utf-8")) if WEATHER_CACHE.exists() else {}
     loc = data.setdefault("location", {})
     station = _effective_station()
     loc.setdefault("station", station)
@@ -168,12 +187,19 @@ def api_status() -> dict:
     # code is the last resort, e.g. right after switching before either has
     # run once against the new station.
     current_station_name = (data.get("current") or {}).get("station_name")
-    loc["city"] = loc.get("station_name") or current_station_name or station
+    city = loc.get("station_name") or current_station_name or station
+    # current.station_name is the raw METAR station name (aviationweather.gov's
+    # "name" field, e.g. "Shanghai/Hongqiao Intl, SH, CN") -- unlike
+    # location.station_name, which weather_mqtt.py's resolve_station_geo
+    # already trims to just the part before the slash (see that function's
+    # docstring). Trimmed here too so the widget shows "Shanghai" regardless
+    # of which of the two sources actually won above.
+    loc["city"] = city.split("/", 1)[0].strip() if city else city
 
     # Supplement with next_watering.json for freshest event list
     if NEXT_WATERING.exists():
         nw = json.loads(NEXT_WATERING.read_text(encoding="utf-8"))
-        sched = (data.get("irrigation") or {}).get("schedule") or {}
+        sched = data.setdefault("irrigation", {}).setdefault("schedule", {})
         if isinstance(sched, dict):
             sched.setdefault("json_payload", nw)
 
@@ -191,8 +217,6 @@ def api_history(n: int = 14) -> dict:
     # were continuous history for this one. Rows written before per-station
     # tracking existed (station="") are excluded here too, not guessed at.
     qs = IrrigationDecision.objects.filter(station=_effective_station())
-    if not qs.exists():
-        return {"rows": _demo_history()}
     rows = list(qs.order_by("local_date").values())
     return {"rows": rows[-n:]}
 
@@ -304,6 +328,28 @@ def api_refresh() -> dict:
     return api_status()
 
 
+def api_clear_cache() -> dict:
+    """Settings panel's "Clear cache" action: wipes every fetched/derived
+    weather+irrigation record -- the ORM tables (IrrigationDecision,
+    MetarReading) and each file in CACHE_FILES -- so the dashboard shows its
+    honest empty state (see api_status()'s docstring) until the next fetch
+    runs, same as a genuine first run. site_config.json is deliberately not
+    touched (see CACHE_FILES).
+
+    Row deletion (not dropping/truncating the table) so this works
+    identically whether it's reached from the systemd-deployed webUI or the
+    Electron shell, neither of which restarts Django/re-runs migrations
+    afterward. Also doubles as the easy way to reset a dev or Electron build
+    back to a clean state without hand-deleting files under the app's data
+    dir.
+    """
+    IrrigationDecision.objects.all().delete()
+    MetarReading.objects.all().delete()
+    for f in CACHE_FILES:
+        f.unlink(missing_ok=True)
+    return {"cleared": True}
+
+
 def _effective_station() -> str:
     """Same override order weather_mqtt.py uses: an explicit site_config.json
     value first, else whatever station the last successful forecast run
@@ -323,151 +369,3 @@ def _effective_station() -> str:
         except Exception:
             pass
     return DEFAULT_STATION
-
-
-# ── Demo data (shown when no cache files exist yet) ───────────────────────────
-
-def _demo_status() -> dict:
-    now = int(time.time())
-    next_epoch = now + 29 * 3600
-    following_epoch = next_epoch + 2 * 86400
-
-    return {
-        "_demo": True,
-        "generated_at": "2026-06-30T14:23:00",
-        "next_run_epoch": int(time.time()) + 3 * 3600,
-        "location": {"lat": 31.7420, "lon": 118.8622, "tz": "Asia/Shanghai", "station": DEFAULT_STATION, "city": "Nanjing Lukou Intl (ZSNJ)"},
-        "horizon_hours": 120,
-        "status": {"source_mode": "ENSEMBLE_AVG_YR+OWM+OM", "yr_ok": True, "owm_ok": True, "om_ok": True},
-        "current": {
-            "source": "METAR",
-            "station": DEFAULT_STATION,
-            "station_name": "Nanjing Lukou Intl (ZSNJ)",
-            "obs_time_epoch": now - 8 * 60,
-            "age_minutes": 8.0,
-            "temp_c": 29,
-            "dewpoint_c": 24,
-            "rh_pct": 71.6,
-            "wind_mps": 3.1,
-            "wind_dir_deg": 220,
-            "pressure_hpa": 1003,
-            "vpd_kpa": 1.02,
-            "raw_ob": "METAR ZSNJ 301400Z 22006MPS 9999 BKN026 29/24 Q1003 NOSIG",
-        },
-        "irrigation": {
-            "decision_percent": 75,
-            "decision_label": "REDUCED",
-            "pump_seconds": 90,
-            "overall_outlook": (
-                "some rain next 24 h; estimated 0–24 h demand 3.21 mm; "
-                "recommendation: reduce irrigation to 75%."
-            ),
-            "summary": (
-                "No drench commanded today. Temperature cadence = 2.00 days. "
-                "event#1 2026-07-01T05:10:00+08:00 (sunrise) → 75% / 90 s"
-            ),
-            "schedule": {
-                "decision_code": "WAIT",
-                "tmin24_c": 24.3,
-                "tmean72_c": 27.1,
-                "tmax24_c": 33.1,
-                "next_watering_epoch": next_epoch,
-                "projected_following_epoch": following_epoch,
-                "schedule_armed": True,
-                "json_payload": {
-                    "events": [
-                        {
-                            "sequence": 1,
-                            "epoch": next_epoch,
-                            "iso_local": "2026-07-01T05:10:00+08:00",
-                            "solar_anchor": "sunrise",
-                            "percent": 75,
-                            "pump_seconds": 90,
-                            "percent_basis": "forecast_fractional",
-                        },
-                        {
-                            "sequence": 2,
-                            "epoch": following_epoch,
-                            "iso_local": "2026-07-03T05:14:00+08:00",
-                            "solar_anchor": "sunrise",
-                            "percent": 60,
-                            "pump_seconds": 72,
-                            "percent_basis": "forecast_fractional",
-                        },
-                    ]
-                },
-            },
-        },
-        "ensemble": {
-            "rain_mm": {
-                "r12": 0.3, "r24": 1.8, "r72": 5.2,
-                "r24_48": 2.1, "r48_72": 1.3,
-            },
-            "demand_mm": {"d0_24": 3.21, "d24_48": 2.87, "d48_72": 2.54},
-            "future_credit": {"cover_ratio_0_1": 0.41, "multiplier": 0.79},
-            "decision_debug": {
-                "pct_base": 95, "pct_final": 75, "exposure_factor": 0.75,
-                "rain_index_mm": 1.24, "start_reduce_mm": 0.79, "full_skip_mm": 3.99,
-            },
-            "climate_debug": {
-                "t_mean_24h_c": 28.5,
-                "rh_mean_24h_pct": 64.2,
-                "wind_mean_24h_mps": 2.1,
-                "vpd_kpa": 0.82,
-                "daylength_h": 14.2,
-                "t_min_12h_c": 24.3,
-                "demand_mm_24h": 3.21,
-                "baseline_pump_seconds_normal": 120,
-            },
-        },
-        "sources": {
-            "yr":  {"rain_mm": {"r12": 0.2, "r24": 1.5, "r72": 4.8}, "demand_mm": {"d0_24": 3.15, "d24_48": 2.80, "d48_72": 2.50}},
-            "owm": {"rain_mm": {"r12": 0.4, "r24": 2.1, "r72": 5.6}, "demand_mm": {"d0_24": 3.27, "d24_48": 2.94, "d48_72": 2.58}},
-            "om":  {"rain_mm": {"r12": 0.3, "r24": 1.8, "r72": 5.1}, "demand_mm": {"d0_24": 3.20, "d24_48": 2.86, "d48_72": 2.53}},
-        },
-        "comparison": {"rows": _demo_forecast_rows()},
-    }
-
-
-def _demo_forecast_rows() -> list:
-    rows = []
-    now = int(time.time())
-    for i in range(24):
-        h = i * 3
-        t_owm = 26.0 + 5.0 * math.sin(math.pi * (h - 6) / 12) + i * 0.06
-        t_yr  = t_owm + 0.8 * math.sin(math.pi * i / 12)
-        t_om  = t_owm - 0.5 * math.sin(math.pi * i / 10)
-        rh    = 65 - 10 * math.sin(math.pi * (h - 6) / 12)
-        rain_owm = 0.0 if h < 12 else (1.5 if h < 18 else 0.4)
-        rain_yr  = 0.0 if h < 14 else (1.2 if h < 18 else 0.3)
-        rain_om  = 0.0 if h < 13 else (1.3 if h < 18 else 0.5)
-        rows.append({
-            "local_time": f"06-30 {h:02d}:00",
-            "epoch": now + h * 3600,
-            "owm_temp_c": round(t_owm, 1),
-            "yr_temp_c":  round(t_yr, 1),
-            "om_temp_c":  round(t_om, 1),
-            "owm_rh_pct": round(rh),
-            "yr_rh_pct":  round(rh + 3),
-            "om_rh_pct":  round(rh - 2),
-            "owm_wind_mps": round(1.5 + 0.5 * math.sin(math.pi * i / 8), 1),
-            "yr_wind_mps":  round(1.8 + 0.3 * math.sin(math.pi * i / 8), 1),
-            "om_wind_mps":  round(1.6 + 0.4 * math.sin(math.pi * i / 8), 1),
-            "owm_rain_3h_mm": round(rain_owm, 1),
-            "yr_rain_3h_mm":  round(rain_yr, 1),
-            "om_rain_3h_mm":  round(rain_om, 1),
-            "owm_desc": "light rain" if rain_owm > 0 else "clear sky",
-            "yr_sym":   "rainshowers_day" if rain_yr > 0 else "clearsky_day",
-            "om_desc":  "rain" if rain_om > 0 else "clear sky",
-        })
-    return rows
-
-
-def _demo_history() -> list:
-    return [
-        {"local_date": "2026-06-23", "decision_code": "DRENCH",     "decision_label": "NORMAL",  "commanded_percent": "100", "commanded_pump_seconds": "120", "forecast_precip_local_day_mm": "0.0",  "forecast_tmin24_c": "22.1", "forecast_tmax24_c": "31.2"},
-        {"local_date": "2026-06-25", "decision_code": "DRENCH",     "decision_label": "REDUCED", "commanded_percent": "80",  "commanded_pump_seconds": "96",  "forecast_precip_local_day_mm": "2.3",  "forecast_tmin24_c": "23.4", "forecast_tmax24_c": "30.1"},
-        {"local_date": "2026-06-27", "decision_code": "DRENCH",     "decision_label": "SKIP",    "commanded_percent": "0",   "commanded_pump_seconds": "0",   "forecast_precip_local_day_mm": "12.5", "forecast_tmin24_c": "20.8", "forecast_tmax24_c": "26.4"},
-        {"local_date": "2026-06-29", "decision_code": "DRENCH",     "decision_label": "LIGHT",   "commanded_percent": "40",  "commanded_pump_seconds": "48",  "forecast_precip_local_day_mm": "0.8",  "forecast_tmin24_c": "24.2", "forecast_tmax24_c": "32.8"},
-        {"local_date": "2026-06-30", "decision_code": "WAIT",       "decision_label": "SKIP",    "commanded_percent": "0",   "commanded_pump_seconds": "0",   "forecast_precip_local_day_mm": "1.8",  "forecast_tmin24_c": "24.3", "forecast_tmax24_c": "33.1"},
-    ]

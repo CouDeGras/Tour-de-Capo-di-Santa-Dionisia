@@ -2,16 +2,6 @@
 
 const I18N = window.I18N || {};
 
-// ── Shared header rendering (demo badge) ────────────────────────────────────
-// Called from each page's own /api/status poll (weather.js, irrigation.js).
-// The station/city name itself is shown by weather.js's location widget, not
-// the header -- the header used to show it too, but that absolutely
-// positioned span sat right on top of the page-nav links and ate their
-// clicks.
-function renderHeader(data) {
-  document.getElementById('demo-badge').classList.toggle('hidden', !data._demo);
-}
-
 // ── Full refresh (shared by the header button and a station change) ─────────
 // Triggers a live re-fetch of all four weather sources (Yr.no, OWM,
 // Open-Meteo, METAR) via POST /api/refresh -- not just a re-read of the
@@ -204,6 +194,40 @@ async function triggerFullRefresh() {
     } finally {
       saveBtn.disabled = false;
       if (saveBtn.textContent === I18N.saving) saveBtn.textContent = label;
+    }
+  });
+})();
+
+// ── Clear cache (settings panel's danger zone) ───────────────────────────────
+// POST /api/clear-cache wipes dashboard/services.py's IrrigationDecision/
+// MetarReading tables and every data/*.json cache file it writes (see that
+// function's docstring for exactly what's kept, namely site_config.json) --
+// this alone is enough for the systemd-deployed webUI, since there's no
+// other cache in play there. Inside the Electron shell there's a second,
+// separate cache this can't reach: the BrowserWindow's own session-level
+// HTTP cache/localStorage (see electron/main.js's clearCache() -- the same
+// thing createWindow() already clears on every load, just on demand here).
+// window.electronAPI.clearCache only exists there, so this is a no-op
+// addition for a normal browser. A full reload afterward either way, so the
+// now-empty backend shows its demo-data fallback instead of stale numbers
+// left over from before the clear.
+(() => {
+  const btn = document.getElementById('config-clear-cache');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!window.confirm(I18N.clear_cache_confirm)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/clear-cache', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      if (window.electronAPI && window.electronAPI.clearCache) {
+        await window.electronAPI.clearCache();
+      }
+      window.location.reload();
+    } catch (err) {
+      console.error('Error clearing cache:', err);
+      window.alert(I18N.clear_cache_failed);
+      btn.disabled = false;
     }
   });
 })();

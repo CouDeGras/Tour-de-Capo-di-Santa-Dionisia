@@ -158,8 +158,6 @@ async function refresh() {
     const hist = await histRes.json();
     const acks = await acksRes.json();
 
-    renderHeader(data);
-
     const irrig = data.irrigation || {};
     const sched = irrig.schedule  || {};
     const ens   = data.ensemble   || {};

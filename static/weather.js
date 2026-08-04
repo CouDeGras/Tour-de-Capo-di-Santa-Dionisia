@@ -918,7 +918,6 @@ async function refresh() {
     const res = await fetch('/api/status');
     const data = await res.json();
 
-    renderHeader(data);
     stationTz = (data.location || {}).tz || null;
     tickLocalClock();
     renderLocation(data.location);

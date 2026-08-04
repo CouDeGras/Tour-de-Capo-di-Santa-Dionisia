@@ -3413,23 +3413,31 @@ def run_fetch_only(args) -> int:
     deliberately never publishes. So the existing cache's 'irrigation' block
     (commanded percent/pump seconds/next-event schedule) is carried over
     unchanged instead of being recomputed, and the IrrigationDecision table/
-    next_watering.json/MQTT are left untouched entirely."""
+    next_watering.json/MQTT are left untouched entirely.
+
+    No existing cache (a genuine first run, or right after the dashboard's
+    "Clear cache" action deletes it) is not an error case: there's no prior
+    'irrigation' block to carry over BECAUSE there's no prior committed
+    decision either (same clear, or none has ever run) -- previous_report
+    just stays {} and report_obj['irrigation'] below comes out {}, same
+    honest "nothing decided yet" state dashboard/services.py's api_status()
+    already renders for a missing cache. Refusing to run here used to leave
+    a cleared cache permanently stuck: the dashboard's refresh button is
+    fetch-only by design (see above), so without this there was no way to
+    populate a first weather_cache.json without going around it and running
+    a full apply_irrigation_schedule() cycle instead -- which is exactly the
+    off-schedule-pump risk this function exists to avoid."""
     global HOURS_AHEAD
     HOURS_AHEAD = int(args.hours)
 
     cache_path = Path(WEATHER_CACHE_JSON).expanduser().resolve()
-    if not cache_path.exists():
-        print(
-            "WARNING: weather_cache.json does not exist yet -- run a full "
-            "fetch (weather_mqtt.py, no flags) first. Skipping fetch-only update.",
-            file=sys.stderr,
-        )
-        return 1
-    try:
-        previous_report = json.loads(cache_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        print(f"ERROR: could not read existing weather_cache.json ({type(e).__name__}: {e}); skipping.", file=sys.stderr)
-        return 1
+    previous_report: Dict[str, Any] = {}
+    if cache_path.exists():
+        try:
+            previous_report = json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"ERROR: could not read existing weather_cache.json ({type(e).__name__}: {e}); skipping.", file=sys.stderr)
+            return 1
 
     location = resolve_location(
         use_ip_location=True if args.use_ip_location else None,
