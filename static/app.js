@@ -102,11 +102,9 @@ async function triggerFullRefresh() {
     broker: document.getElementById('cfg-broker'),
     root_topic: document.getElementById('cfg-topic'),
     lang: document.getElementById('cfg-lang'),
+    sun_projection: document.getElementById('cfg-sun-projection'),
+    sun_view: document.getElementById('cfg-sun-view'),
     mqtt_pub_password: document.getElementById('cfg-aes-key'),
-  };
-  const switches = {
-    sun_projection: { input: document.getElementById('cfg-sun-projection'), on: 'orthographic', off: 'linear' },
-    sun_view: { input: document.getElementById('cfg-sun-view'), on: 'up', off: 'down' },
   };
 
   // Airport codes are always 4 uppercase letters -- normalize as the user
@@ -116,6 +114,44 @@ async function triggerFullRefresh() {
     fields.station.value = fields.station.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
     fields.station.setSelectionRange(start, start);
   });
+
+  // Language: a globe button cycling en -> fr -> it -> en instead of a
+  // dropdown. fields.lang (a hidden input, see base.html) still holds the
+  // actual code and goes through the same load/save loop as every other
+  // field in `fields` above -- only the visible label next to the button
+  // needs its own sync, on open and on every cycle.
+  const LANGS = ['en', 'fr', 'it'];
+  const LANG_LABELS = { en: 'English', fr: 'Français', it: 'Italiano' };
+  const langBtn = document.getElementById('cfg-lang-btn');
+  const langLabel = document.getElementById('cfg-lang-label');
+  const setLangDisplay = (code) => { langLabel.textContent = LANG_LABELS[code] || code; };
+  langBtn.addEventListener('click', () => {
+    const next = LANGS[(LANGS.indexOf(fields.lang.value) + 1) % LANGS.length];
+    fields.lang.value = next;
+    setLangDisplay(next);
+  });
+
+  // Icon-cycle buttons (sun path style, sun path view): a single button per
+  // field, same interaction as the language globe button and citrus mode
+  // toggle -- one click steps to the next value in data-values (a small
+  // fixed comma-separated list, e.g. "linear,orthographic") and wraps
+  // around. Which icon shows is pure CSS ([data-value=...] .icon-value-...,
+  // see style.css), driven by the button's own data-value attribute; this
+  // just keeps that attribute and the paired hidden input (in `fields`
+  // above, by data-field) in sync.
+  const cycleBtns = overlay.querySelectorAll('.icon-cycle-btn');
+  const syncCycleBtn = (btn) => {
+    btn.dataset.value = fields[btn.dataset.field].value || btn.dataset.values.split(',')[0];
+  };
+  for (const btn of cycleBtns) {
+    btn.addEventListener('click', () => {
+      const values = btn.dataset.values.split(',');
+      const input = fields[btn.dataset.field];
+      const next = values[(values.indexOf(input.value) + 1) % values.length];
+      input.value = next;
+      btn.dataset.value = next;
+    });
+  }
 
   const close = () => overlay.classList.add('hidden');
 
@@ -134,9 +170,8 @@ async function triggerFullRefresh() {
       for (const key of Object.keys(fields)) {
         fields[key].value = cfg[key] || '';
       }
-      for (const key of Object.keys(switches)) {
-        switches[key].input.checked = cfg[key] === switches[key].on;
-      }
+      setLangDisplay(fields.lang.value || 'en');
+      for (const btn of cycleBtns) syncCycleBtn(btn);
       openedStation = (cfg.station || '').trim().toUpperCase();
     } catch (err) {
       console.error('Error loading config:', err);
@@ -158,9 +193,6 @@ async function triggerFullRefresh() {
     try {
       const body = {};
       for (const key of Object.keys(fields)) body[key] = fields[key].value.trim();
-      for (const key of Object.keys(switches)) {
-        body[key] = switches[key].input.checked ? switches[key].on : switches[key].off;
-      }
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -195,6 +227,23 @@ async function triggerFullRefresh() {
       saveBtn.disabled = false;
       if (saveBtn.textContent === I18N.saving) saveBtn.textContent = label;
     }
+  });
+})();
+
+// ── Citrus mode (settings panel, purely cosmetic) ────────────────────────────
+// A toggle that does nothing besides remember its own on/off state (swapping
+// its icon, persisted in localStorage so it's still set next time the panel
+// opens) -- not wired to /api/config or anything else the dashboard does.
+(() => {
+  const btn = document.getElementById('cfg-citrus-toggle');
+  if (!btn) return;
+  const STORAGE_KEY = 'citrusMode';
+  const setPressed = (on) => btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  setPressed(localStorage.getItem(STORAGE_KEY) === '1');
+  btn.addEventListener('click', () => {
+    const on = btn.getAttribute('aria-pressed') !== 'true';
+    setPressed(on);
+    try { localStorage.setItem(STORAGE_KEY, on ? '1' : '0'); } catch (err) { /* ignore */ }
   });
 })();
 

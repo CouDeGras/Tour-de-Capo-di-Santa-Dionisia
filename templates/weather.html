@@ -6,19 +6,23 @@
 
   <div class="layout">
 
-    <!-- Left column: local clock + location, then raw airport metrics -->
+    <!-- Left column: local clock + location (one tight row), then the sun
+         path -- see weather.js's refresh() for what actually fills each of
+         these in. -->
     <div class="col-left">
 
-      <div class="card">
-        <div class="card-label">{{ t.card_local_time }}</div>
-        <div id="local-time" class="reading-countdown">—</div>
-        <div id="local-date" class="card-subtext">—</div>
-      </div>
+      <div class="grid g-2">
+        <div class="card">
+          <div class="card-label">{{ t.card_local_time }}</div>
+          <div id="local-time" class="reading-countdown">—</div>
+          <div id="local-date" class="card-subtext">—</div>
+        </div>
 
-      <div class="card">
-        <div class="card-label">{{ t.card_location }}</div>
-        <div id="loc-name" class="loc-name">—</div>
-        <div id="loc-coords" class="card-subtext">—</div>
+        <div class="card">
+          <div class="card-label">{{ t.card_location }}</div>
+          <div id="loc-name" class="loc-name">—</div>
+          <div id="loc-coords" class="card-subtext">—</div>
+        </div>
       </div>
 
       <div class="card">
@@ -26,50 +30,56 @@
         <canvas id="chart-sun"></canvas>
       </div>
 
+    </div>
+
+    <!-- Right column: raw airport metrics above the three stacked charts,
+         same time axis -->
+    <div class="col-right">
+
+      <!-- All four raw airport metrics, one row, same large size. -->
       <div class="grid g-4">
-        <div class="card metric-card">
+        <div class="card metric-card metric-card-lg">
           <div class="metric-label">{{ t.metric_temp }}</div>
           <div id="m-temp" class="metric-value">—</div>
           <div id="m-temp-range" class="metric-sub">—</div>
         </div>
-        <div class="card metric-card">
+        <div class="card metric-card metric-card-lg">
           <div class="metric-label">{{ t.metric_rh }}</div>
           <div id="m-rh" class="metric-value">—</div>
           <div id="m-rh-sub" class="metric-sub">{{ t.metric_rh_sub }}</div>
         </div>
-        <div class="card metric-card">
+        <div class="card metric-card metric-card-lg">
           <div class="metric-label">{{ t.metric_wind }}</div>
           <div id="m-wind" class="metric-value">—</div>
           <div class="metric-sub">m/s</div>
         </div>
-        <div class="card metric-card">
+        <div class="card metric-card metric-card-lg">
           <div class="metric-label">{{ t.metric_vpd }}</div>
           <div id="m-vpd" class="metric-value">—</div>
           <div class="metric-sub">kPa</div>
         </div>
       </div>
 
-    </div>
+      <div class="card col-charts">
+        <div class="stk-header">
+          {{ t.chart_owm }}
+          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        </div>
+        <div class="chart-scroll"><canvas id="chart-rain-owm"></canvas></div>
 
-    <!-- Right column: three stacked charts, same time axis -->
-    <div class="card col-charts">
-      <div class="stk-header">
-        {{ t.chart_owm }}
-        <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
-      </div>
-      <div class="chart-scroll"><canvas id="chart-rain-owm"></canvas></div>
+        <div class="stk-header">
+          {{ t.chart_yr }}
+          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        </div>
+        <div class="chart-scroll"><canvas id="chart-rain-yr"></canvas></div>
 
-      <div class="stk-header">
-        {{ t.chart_yr }}
-        <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        <div class="stk-header">
+          {{ t.chart_om }}
+          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        </div>
+        <div class="chart-scroll"><canvas id="chart-rain-om"></canvas></div>
       </div>
-      <div class="chart-scroll"><canvas id="chart-rain-yr"></canvas></div>
 
-      <div class="stk-header">
-        {{ t.chart_om }}
-        <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
-      </div>
-      <div class="chart-scroll"><canvas id="chart-rain-om"></canvas></div>
     </div>
 
   </div>

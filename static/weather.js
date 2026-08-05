@@ -394,7 +394,13 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view) {
     const norm = Math.hypot(dx, dy) || 1;
     const offset = R * 0.3;
     const lx = x + (dx / norm) * offset, ly = y + (dy / norm) * offset;
-    labels.push({ text: `${Math.round(nowPos.elevation)}°/${Math.round(nowPos.az)}°`, x: lx, y: ly, font: '9px monospace' });
+    // Two stacked labels, not one string with '\n' -- canvas fillText has no
+    // concept of line breaks, it'd just draw straight through the newline
+    // glyph-less. haloText already halos each line's own measured width
+    // independently, which reads better here anyway (az. is usually the
+    // wider line, alt. would otherwise sit inside an oversized shared halo).
+    labels.push({ text: `alt. ${Math.round(nowPos.elevation)}°`, x: lx, y: ly - 5, font: '9px monospace' });
+    labels.push({ text: `az. ${Math.round(nowPos.az)}°`, x: lx, y: ly + 5, font: '9px monospace' });
   }
 
   // All labels last, on top of every stroke -- drawn in the order added
@@ -489,7 +495,11 @@ function drawGrid(canvasId, values, opts) {
   const totalRows = nRows + 1;
 
   const MB = opts.hideXLabels ? 0 : 18;
-  const { ML, CELL, GAP, colW, cssW } = colLayout(canvas.parentElement, nCols);
+  // opts.layout lets a caller share one measurement across multiple charts
+  // (see renderRainCharts) instead of each canvas measuring its own
+  // parentElement -- falls back to measuring here when no shared layout was
+  // given, same as before.
+  const { ML, CELL, GAP, colW, cssW } = opts.layout || colLayout(canvas.parentElement, nCols);
   const rowH = CELL + 1;
   // Single label row above the bars, shared by day-boundary marks and
   // irrigation percent marks. They're laid out together with collision
@@ -838,11 +848,19 @@ function dateMarks(rows) {
 const AXIS_STEP = 2;
 const RAIN_MIN_MAX_MM = 20; // floor for the rain axis top, so a dry spell doesn't flatten the grid
 
-// Shared across all three panels (rain AND temp) so a given row means the
-// same mm/°C on every chart, and the chart height is whichever of the two
-// series actually needs more rows at the shared scale -- not always the
-// rain axis, the way it used to be when temp had its own independent
-// full-height normalization.
+// Computes one rain+temp axis (row scale, span, centered temp range) from
+// whatever series lists it's given -- 1 row is always AXIS_STEP mm AND
+// AXIS_STEP °C, that ratio is a fixed constant, not derived from the data.
+// Called per-chart (see renderRainCharts), each with just its own single
+// series: the row scale being fixed is exactly what makes each of the three
+// charts free to size its own height independently -- OWM, Yr.no and
+// Open-Meteo can each max out at their own tallest prediction (and fall
+// back to RAIN_MIN_MAX_MM's floor on a dry/flat one) without losing the
+// "1mm/1°C is always this many pixels, on every chart" comparability that
+// mattered here, since that comes from the shared step, not a shared total
+// height. Still takes lists (not single series) rather than being
+// hard-wired to one-chart-at-a-time, in case a future caller ever does want
+// a genuinely shared axis across multiple series again.
 function combinedAxis(rainSeriesList, tempSeriesList) {
   const rainMaxRaw = Math.max(...rainSeriesList.flat(), 0.01);
   const rainRows = Math.max(RAIN_MIN_MAX_MM / AXIS_STEP, Math.ceil(rainMaxRaw / AXIS_STEP));
@@ -895,19 +913,38 @@ function renderRainCharts(rows) {
   const omTemps      = rows.map(r => r.om_temp_c);
 
   const dm = dateMarks(rows);
-  const axis = combinedAxis([owmRain, yrRain, omRain], [owmTemps, yrTemps, omTemps]);
+  // One axis per chart, not one shared across all three -- see
+  // combinedAxis's docstring for why that's fine despite the "same mm/°C
+  // per row everywhere" comparability still holding: each chart maxes out
+  // (or floors out, on a dry/flat one) at its own tallest prediction
+  // instead of all three being stretched to match whichever source has the
+  // biggest number.
+  const axisOwm = combinedAxis([owmRain], [owmTemps]);
+  const axisYr  = combinedAxis([yrRain],  [yrTemps]);
+  const axisOm  = combinedAxis([omRain],  [omTemps]);
+
+  // Width, unlike height, IS still shared across all three -- computed once
+  // here rather than letting each drawGrid call independently measure its
+  // own canvas.parentElement. .layout's right column is sized to
+  // max-content (style.css), i.e. to however wide these very canvases end
+  // up; resizing chart 1's canvas shifts that column's width before chart 2
+  // gets measured, and again before chart 3, so three independent
+  // measurements landed on three different widths even though nCols
+  // (rows.length) is identical for all three. One shared measurement,
+  // taken before any of the three touches the DOM, keeps them identical.
+  const chartLayout = colLayout(document.getElementById('chart-rain-owm')?.parentElement, rows.length);
 
   drawGrid('chart-rain-owm', owmRain, {
-    labels, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic,
-    overlay: axis.temp && { values: owmTemps, ...axis.temp },
+    labels, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisOwm.temp && { values: owmTemps, ...axisOwm.temp },
   });
   drawGrid('chart-rain-yr', yrRain, {
-    labels, ...axis.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic,
-    overlay: axis.temp && { values: yrTemps, ...axis.temp },
+    labels, ...axisYr.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisYr.temp && { values: yrTemps, ...axisYr.temp },
   });
   drawGrid('chart-rain-om', omRain, {
-    labels, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic,
-    overlay: axis.temp && { values: omTemps, ...axis.temp },
+    labels, ...axisOm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisOm.temp && { values: omTemps, ...axisOm.temp },
   });
 }
 
