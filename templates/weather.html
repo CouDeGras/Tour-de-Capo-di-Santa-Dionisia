@@ -46,12 +46,12 @@
         <div class="card metric-card metric-card-lg">
           <div class="card-label">{{ t.metric_rh }}</div>
           <div id="m-rh" class="metric-value">—</div>
-          <div id="m-rh-sub" class="metric-sub">{{ t.metric_rh_sub }}</div>
+          <div id="m-rh-sub" class="metric-sub">—</div>
         </div>
         <div class="card metric-card metric-card-lg">
           <div class="card-label">{{ t.metric_wind }}</div>
           <div id="m-wind" class="metric-value">—</div>
-          <div class="metric-sub">m/s</div>
+          <div id="m-wind-dir" class="metric-sub">—</div>
         </div>
         <div class="card metric-card metric-card-lg">
           <div class="card-label">{{ t.metric_vpd }}</div>
@@ -86,4 +86,4 @@
 
 {% endblock %}
 
-{% block page_script %}<script src="/static/weather.js"></script>{% endblock %}
+{% block page_script %}<script src="/static/charts.js"></script><script src="/static/weather.js"></script>{% endblock %}

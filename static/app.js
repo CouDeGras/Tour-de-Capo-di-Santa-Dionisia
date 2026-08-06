@@ -85,6 +85,13 @@ async function triggerFullRefresh() {
   const saveBtn = document.getElementById('config-save');
   if (!overlay || !openBtn) return;
 
+  // Broker/topic/mqtt_pub_password/pump_* (not station -- that's the
+  // weather source, stays visible regardless) only render at all when
+  // citrus mode is "on" (see base.html/dashboard/views.py's citrus_on) --
+  // document.getElementById returns null for whichever of these aren't in
+  // the DOM this load, and the prune step right after drops those keys
+  // entirely so every loop below (load/save) just never sees them, rather
+  // than needing its own null check.
   const fields = {
     station: document.getElementById('cfg-station'),
     broker: document.getElementById('cfg-broker'),
@@ -93,11 +100,17 @@ async function triggerFullRefresh() {
     sun_projection: document.getElementById('cfg-sun-projection'),
     sun_view: document.getElementById('cfg-sun-view'),
     mqtt_pub_password: document.getElementById('cfg-aes-key'),
+    pump_flow_rate_lpm: document.getElementById('cfg-pump-flow-rate'),
+    pump_target_volume_l: document.getElementById('cfg-pump-target-volume'),
+    citrus_mode: document.getElementById('cfg-citrus-mode'),
   };
+  for (const key of Object.keys(fields)) {
+    if (!fields[key]) delete fields[key];
+  }
 
   // Airport codes are always 4 uppercase letters -- normalize as the user
   // types so what they see matches what the backend will validate/store.
-  fields.station.addEventListener('input', () => {
+  fields.station?.addEventListener('input', () => {
     const start = fields.station.selectionStart;
     fields.station.value = fields.station.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
     fields.station.setSelectionRange(start, start);
@@ -149,6 +162,28 @@ async function triggerFullRefresh() {
     });
   }
 
+  // Citrus mode: an on/off toggle, not a data-values cycle button (see
+  // .icon-cycle-btn above) since there are only two states -- but the same
+  // "fields.citrus_mode (hidden input) is the source of truth, sync the
+  // visible bits from it" shape as everything else here. Its real effect
+  // (the irrigation-decision/pump-command pipeline, and the station/
+  // Irrigation nav visibility that goes with it) lives entirely server-side
+  // -- see weather_mqtt.py's CITRUS_MODE and dashboard/views.py's
+  // citrus_on -- so a change here only takes effect after the save-time
+  // reload below, same as language.
+  const citrusBtn = document.getElementById('cfg-citrus-toggle');
+  const citrusLabel = document.getElementById('cfg-citrus-label');
+  const syncCitrusBtn = () => {
+    if (!citrusBtn || !fields.citrus_mode) return;
+    const on = fields.citrus_mode.value === 'on';
+    citrusBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (citrusLabel) citrusLabel.textContent = on ? I18N.citrus_on_label : I18N.citrus_off_label;
+  };
+  citrusBtn?.addEventListener('click', () => {
+    fields.citrus_mode.value = fields.citrus_mode.value === 'on' ? 'off' : 'on';
+    syncCitrusBtn();
+  });
+
   // Most browsers keep a button :focus'd after a mouse click (not just
   // keyboard :focus-visible), which kept .icon-hover-label expanded via
   // :focus long after the mouse moved on to a different icon -- both
@@ -171,6 +206,7 @@ async function triggerFullRefresh() {
   // genuinely stale/wrong for the new value until a real fetch runs (unlike
   // e.g. sun path style, which just needs a re-read of already-cached data).
   let openedStation = '';
+  let openedCitrusMode = '';
 
   const open = async () => {
     overlay.classList.remove('hidden');
@@ -182,7 +218,9 @@ async function triggerFullRefresh() {
       }
       setLangDisplay(fields.lang.value || 'en');
       for (const btn of cycleBtns) syncCycleBtn(btn);
+      syncCitrusBtn();
       openedStation = (cfg.station || '').trim().toUpperCase();
+      openedCitrusMode = cfg.citrus_mode || '';
     } catch (err) {
       console.error('Error loading config:', err);
     }
@@ -211,11 +249,17 @@ async function triggerFullRefresh() {
       if (!res.ok) throw new Error(await res.text());
       // Static, server-rendered text only reflects the new language after a
       // full reload -- the modal fields themselves already show it live.
-      if (fields.lang.value !== document.documentElement.lang) {
+      // Same deal for citrus mode -- it gates server-rendered nav links and
+      // config fields (see dashboard/views.py's citrus_on), which only
+      // change on the next full page render.
+      if (
+        fields.lang.value !== document.documentElement.lang ||
+        (fields.citrus_mode && fields.citrus_mode.value !== openedCitrusMode)
+      ) {
         window.location.reload();
         return;
       }
-      const stationChanged = fields.station.value.trim().toUpperCase() !== openedStation;
+      const stationChanged = fields.station ? fields.station.value.trim().toUpperCase() !== openedStation : false;
       close();
       // A changed station has no fresh weather_cache.json data yet -- a
       // real fetch (triggerFullRefresh, same as the header's manual refresh
@@ -237,29 +281,6 @@ async function triggerFullRefresh() {
       saveBtn.disabled = false;
       if (saveBtn.textContent === I18N.saving) saveBtn.textContent = label;
     }
-  });
-})();
-
-// ── Citrus mode (settings panel, purely cosmetic) ────────────────────────────
-// A toggle that does nothing besides remember its own on/off state (swapping
-// its icon, persisted in localStorage so it's still set next time the panel
-// opens) -- not wired to /api/config or anything else the dashboard does.
-(() => {
-  const btn = document.getElementById('cfg-citrus-toggle');
-  if (!btn) return;
-  const label = document.getElementById('cfg-citrus-label');
-  const STORAGE_KEY = 'citrusMode';
-  // Hover label shows on/off -- what the state actually means, not the
-  // field name -- same rule as the sun path style/view cycle buttons.
-  const setPressed = (on) => {
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    if (label) label.textContent = on ? I18N.citrus_on_label : I18N.citrus_off_label;
-  };
-  setPressed(localStorage.getItem(STORAGE_KEY) === '1');
-  btn.addEventListener('click', () => {
-    const on = btn.getAttribute('aria-pressed') !== 'true';
-    setPressed(on);
-    try { localStorage.setItem(STORAGE_KEY, on ? '1' : '0'); } catch (err) { /* ignore */ }
   });
 })();
 

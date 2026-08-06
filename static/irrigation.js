@@ -143,6 +143,49 @@ function renderHistory(rows) {
   }).join('');
 }
 
+// ── Mean-of-sources rain/temp chart (right column) ──────────────────────────
+// Reuses weather.js's own drawGrid/colLayout/dateMarks/combinedAxis
+// machinery (split out into charts.js so this page doesn't have to load
+// weather.js's own page-driving code just for these) -- but averaged into
+// one series instead of three side by side, since this page cares about
+// the irrigation decision's inputs at a glance, not comparing sources
+// against each other.
+function meanOf(values) {
+  const nums = values.filter(v => v != null);
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+
+function renderMeanChart(rows) {
+  const labels   = rows.map(hLabel);
+  const epochs   = rows.map(r => r.epoch);
+  const historic = rows.map(r => r.historic ?? false);
+  // Historic rows carry no rain total from any source (see weather.js's
+  // renderRainCharts) -- averaging three nulls would already come out null
+  // via meanOf, this just keeps that "blank/padded, not a false 0mm" intent
+  // explicit rather than incidental.
+  const rainMean = rows.map(r => r.historic ? null : meanOf([r.owm_rain_3h_mm, r.yr_rain_3h_mm, r.om_rain_3h_mm]));
+  const tempMean = rows.map(r => meanOf([r.owm_temp_c, r.yr_temp_c, r.om_temp_c]));
+
+  const dm = dateMarks(rows);
+  const axis = combinedAxis([rainMean], [tempMean]);
+  // Fixed at colLayout's own max cell size, not measured against the
+  // container -- same reasoning as weather.js's renderRainCharts: this
+  // column is .layout's max-content track (style.css), sized to this very
+  // chart's own width, so measuring it back would create the same
+  // small-on-first-paint / grows-over-refreshes feedback loop that fix
+  // exists to avoid. nCols (rows.length) is the only input, so the width
+  // is deterministic from the very first paint.
+  const layout = (() => {
+    const ML = 36, CELL = 8, GAP = Math.max(1, Math.floor(CELL * 0.15));
+    return { ML, CELL, GAP, colW: CELL + GAP, cssW: ML + rows.length * (CELL + GAP) };
+  })();
+
+  drawGrid('chart-rain-mean', rainMean, {
+    labels, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout,
+    overlay: axis.temp && { values: tempMean, ...axis.temp },
+  });
+}
+
 // ── Main refresh ─────────────────────────────────────────────────────────────
 
 let lastAckDevices = {};
@@ -161,10 +204,12 @@ async function refresh() {
     const irrig = data.irrigation || {};
     const sched = irrig.schedule  || {};
     const ens   = data.ensemble   || {};
+    const frows = (data.comparison || {}).rows || [];
 
     renderCountdown(sched);
     renderDemand(ens);
     renderHistory(hist.rows || []);
+    if (frows.length) renderMeanChart(frows);
 
     lastAckDevices = acks.devices || {};
     renderPumpNodes(lastAckDevices);

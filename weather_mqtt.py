@@ -147,6 +147,35 @@ DEFAULT_LON = 118.8622
 DEFAULT_TZ = "Asia/Shanghai"
 STATION_GEO_CACHE_JSON = str(_DATA_DIR / "station_geo_cache.json")
 
+# Pump flow rate (L/min) and the volume (L) a 100%/"normal" drench should
+# deliver -- together these ARE the baseline pump duration now (see
+# baseline_pump_seconds_normal() below), replacing what used to be a
+# hand-picked BASELINE_PUMP_SECONDS_NORMAL time constant with a duration
+# actually derived from the pump's real output. 24L / 12L/min = 120s, i.e.
+# these defaults reproduce the exact duration the old hardcoded constant
+# used, so an install that never touches the new config fields sees no
+# behavior change. User-editable via the dashboard's config panel, same
+# site_config.json override mechanism as DEFAULT_STATION above (see
+# refresh_site_config_overrides()).
+DEFAULT_PUMP_FLOW_RATE_LPM = 12.0
+DEFAULT_PUMP_TARGET_VOLUME_L = 24.0
+PUMP_FLOW_RATE_LPM = DEFAULT_PUMP_FLOW_RATE_LPM
+PUMP_TARGET_VOLUME_L = DEFAULT_PUMP_TARGET_VOLUME_L
+
+# Master kill switch for the whole irrigation-decision/pump-command pipeline
+# -- deliberately named/labeled nothing like that in the dashboard (see the
+# settings panel's "citrus mode" toggle, static/app.js), by explicit design
+# choice. "off" (the default, matching the toggle's own unchecked default
+# state): run_once() still fetches/publishes weather as normal, but skips
+# apply_irrigation_schedule() entirely -- no decision computed, nothing
+# written to the IrrigationDecision table or next_watering.json, no MQTT
+# publish. "on" restores the normal pipeline. User-editable via
+# site_config.json, same override mechanism as DEFAULT_STATION above (see
+# refresh_site_config_overrides()).
+CITRUS_MODES = ("on", "off")
+DEFAULT_CITRUS_MODE = "off"
+CITRUS_MODE = DEFAULT_CITRUS_MODE
+
 # ====== SITE CONFIG OVERRIDE ======
 # User-editable via the dashboard's config panel. data/site_config.json is
 # written by main.py's /api/config endpoint; if it's missing, unreadable, or
@@ -168,8 +197,9 @@ def load_site_config(path: str) -> Dict[str, Any]:
 
 def refresh_site_config_overrides() -> None:
     """Re-read data/site_config.json and refresh the module-level
-    station/broker/topic overrides it can set (DEFAULT_STATION,
-    MQTT_BROKER_HOST/PORT, MQTT_TOPIC_PUB/ACK).
+    station/broker/topic/pump overrides it can set (DEFAULT_STATION,
+    MQTT_BROKER_HOST/PORT, MQTT_TOPIC_PUB/ACK, PUMP_FLOW_RATE_LPM,
+    PUMP_TARGET_VOLUME_L, CITRUS_MODE).
 
     Historically this only needed to run once at import time, because every
     cycle was a fresh `python3 weather_mqtt.py` process (timer-triggered) --
@@ -181,6 +211,7 @@ def refresh_site_config_overrides() -> None:
     --current-only/--fetch-only/no-flag single-shot invocations, matching
     the original one-read-per-process behavior exactly."""
     global DEFAULT_STATION, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_TOPIC_PUB, MQTT_TOPIC_ACK, MQTT_PUB_AES_KEY
+    global PUMP_FLOW_RATE_LPM, PUMP_TARGET_VOLUME_L, CITRUS_MODE
     site_cfg = load_site_config(SITE_CONFIG_JSON)
 
     station_raw = str(site_cfg.get("station") or "").strip().upper()
@@ -209,6 +240,27 @@ def refresh_site_config_overrides() -> None:
     password_raw = str(site_cfg.get("mqtt_pub_password") or "").strip()
     MQTT_PUB_AES_KEY = mqtt_pub_password_to_key(password_raw) if password_raw else None
 
+    # Blank/unparseable/non-positive falls back to the default rather than
+    # raising -- same "optional, not required" contract every other field in
+    # this file has -- since a bad value here would otherwise silently zero
+    # out or blow up every pump duration computed from it.
+    try:
+        flow_rate_raw = float(site_cfg.get("pump_flow_rate_lpm"))
+        if flow_rate_raw > 0:
+            PUMP_FLOW_RATE_LPM = flow_rate_raw
+    except (TypeError, ValueError):
+        pass
+    try:
+        target_volume_raw = float(site_cfg.get("pump_target_volume_l"))
+        if target_volume_raw > 0:
+            PUMP_TARGET_VOLUME_L = target_volume_raw
+    except (TypeError, ValueError):
+        pass
+
+    citrus_raw = str(site_cfg.get("citrus_mode") or "").strip().lower()
+    if citrus_raw in CITRUS_MODES:
+        CITRUS_MODE = citrus_raw
+
 
 refresh_site_config_overrides()
 
@@ -233,12 +285,25 @@ EXPOSURE_FACTOR = 0.75
 FUTURE_CREDIT_MIN_MULTIPLIER = 0.50
 W24 = 0.70
 W12 = 0.30
-BASELINE_PUMP_SECONDS_NORMAL = 120
 MIN_PUMP_SECONDS_IF_RUNNING = 20
 
-# Legacy: full fixed drench is gone — every scheduled event now gets a fresh
-# fractional percentage of BASELINE_PUMP_SECONDS_NORMAL. Kept for reference.
-FULL_DRENCH_SECONDS = BASELINE_PUMP_SECONDS_NORMAL
+
+def baseline_pump_seconds_normal() -> int:
+    """The pump duration a 100%/"normal" drench commands -- every scheduled
+    event's actual seconds is a fractional percentage of this (see
+    pump_seconds_from_percent). Used to be a hand-picked constant
+    (BASELINE_PUMP_SECONDS_NORMAL = 120); now derived from the pump's real
+    flow rate and a target volume (PUMP_FLOW_RATE_LPM, PUMP_TARGET_VOLUME_L
+    -- both user-editable via the dashboard, see refresh_site_config_overrides()),
+    so "100%" means an actual, chosen liters figure instead of an arbitrary
+    120 seconds. A function, not a constant computed once at import time,
+    because those two inputs can change (site_config.json edited via the
+    settings panel) while --service's single long-running process is still
+    up -- see run_service()'s refresh_site_config_overrides() call each
+    cycle."""
+    return max(1, round(PUMP_TARGET_VOLUME_L / PUMP_FLOW_RATE_LPM * 60))
+
+
 FREEZE_HOLD_TEMP_C = 0.0
 EXTREME_HEAT_MAX_C = 40.0
 RAIN_POSTPONE_FRACTION = 0.20
@@ -593,6 +658,41 @@ def ensemble_temp_stats(
         "tmin24_c": mean_available(yr_s.get("tmin24_c"), owm_s.get("tmin24_c"), om_s.get("tmin24_c")),
         "tmax24_c": mean_available(yr_s.get("tmax24_c"), owm_s.get("tmax24_c"), om_s.get("tmax24_c")),
         "tmean72_c": mean_available(yr_s.get("tmean72_c"), owm_s.get("tmean72_c"), om_s.get("tmean72_c")),
+    }
+
+
+# Same shape as rows_temp_stats/ensemble_temp_stats above, just for relative
+# humidity's next-24h min/max instead of temperature's -- the dashboard's
+# Humidity tile wants a forecast range under it the same way the Temp tile
+# already does (m-temp-range), rather than the METAR observation-age
+# caption every OTHER tile skips anyway.
+def rows_rh_stats(rows: List["Row"], now_utc: datetime) -> Dict[str, Optional[float]]:
+    vals24: List[float] = []
+    for r in rows:
+        if r.rh_pct is None:
+            continue
+        h = (r.time_utc - now_utc).total_seconds() / 3600.0
+        if h < 0 or h >= 24.0:
+            continue
+        vals24.append(float(r.rh_pct))
+    return {
+        "rhmin24_pct": min(vals24) if vals24 else None,
+        "rhmax24_pct": max(vals24) if vals24 else None,
+    }
+
+
+def ensemble_rh_stats(
+    yr_rows: Optional[List["Row"]],
+    owm_rows: Optional[List["Row"]],
+    om_rows: Optional[List["Row"]],
+    now_utc: datetime,
+) -> Dict[str, Optional[float]]:
+    yr_s = rows_rh_stats(yr_rows, now_utc) if yr_rows is not None else {}
+    owm_s = rows_rh_stats(owm_rows, now_utc) if owm_rows is not None else {}
+    om_s = rows_rh_stats(om_rows, now_utc) if om_rows is not None else {}
+    return {
+        "rhmin24_pct": mean_available(yr_s.get("rhmin24_pct"), owm_s.get("rhmin24_pct"), om_s.get("rhmin24_pct")),
+        "rhmax24_pct": mean_available(yr_s.get("rhmax24_pct"), owm_s.get("rhmax24_pct"), om_s.get("rhmax24_pct")),
     }
 
 
@@ -1050,6 +1150,13 @@ def apply_irrigation_schedule(
     tmax24_c = temp_stats.get("tmax24_c")
     target_interval_days, temp_mode = target_interval_days_from_temperature(tmin24_c, tmean72_c, tmax24_c)
 
+    # Display-only (see rows_rh_stats/ensemble_rh_stats above) -- not fed
+    # into any decision math the way temp_stats is, purely so the dashboard
+    # has a next-24h RH range to show under the Humidity tile.
+    rh_stats = ensemble_rh_stats(yr_rows=yr_rows, owm_rows=owm_rows, om_rows=om_rows, now_utc=now_utc)
+    rhmin24_pct = rh_stats.get("rhmin24_pct")
+    rhmax24_pct = rh_stats.get("rhmax24_pct")
+
     today = now_local.date()
     daily_precip_map = ensemble_daily_precip_map(yr_rows, owm_rows, om_rows, location.tz_name)
     forecast_precip_local_day_mm = float(daily_precip_map.get(today.isoformat(), 0.0))
@@ -1263,7 +1370,7 @@ def apply_irrigation_schedule(
         "commanded_pump_seconds": int(commanded_pump_seconds),
         "decision_code": decision_code,
         "decision_label": decision_label,
-        "baseline_pump_seconds_normal": BASELINE_PUMP_SECONDS_NORMAL,
+        "baseline_pump_seconds_normal": baseline_pump_seconds_normal(),
         "events": pump_events,
         "next_watering_epoch": int(next_command_epoch),
         "next_watering_iso_local": datetime.fromtimestamp(next_command_epoch, tz=tz).isoformat(timespec="seconds"),
@@ -1277,6 +1384,8 @@ def apply_irrigation_schedule(
         "tmean72_c": tmean72_c,
         "tmax24_c": tmax24_c,
         "temperature_mode": temp_mode,
+        "rhmin24_pct": rhmin24_pct,
+        "rhmax24_pct": rhmax24_pct,
         "target_interval_days": None if not math.isfinite(target_interval_days) else float(target_interval_days),
         "forecast_precip_local_day_mm": forecast_precip_local_day_mm,
         "forecast_precip_next24_mm": forecast_precip_next24_mm,
@@ -1930,9 +2039,18 @@ def label_from_percent(p: int) -> str:
 
 def pump_seconds_from_percent(
     percent: int,
-    baseline_seconds_normal: int = BASELINE_PUMP_SECONDS_NORMAL,
+    baseline_seconds_normal: Optional[int] = None,
     min_seconds_if_running: int = MIN_PUMP_SECONDS_IF_RUNNING,
 ) -> int:
+    # None (the default), not a bound default value -- baseline_pump_seconds_normal()
+    # depends on PUMP_FLOW_RATE_LPM/PUMP_TARGET_VOLUME_L, which can change at
+    # runtime (site_config.json edited via the settings panel while
+    # --service's one long-running process is still up); a plain default
+    # argument would instead freeze whatever those were at first import,
+    # same class of bug function defaults with mutable/reloadable state
+    # always risk.
+    if baseline_seconds_normal is None:
+        baseline_seconds_normal = baseline_pump_seconds_normal()
     p = int(clamp(float(percent), 0.0, 100.0))
     if p <= 0:
         return 0
@@ -2309,7 +2427,7 @@ def render_report(
     lines.append(f"vpd_term={fmt_num(cdbg['vpd_term'], 3)}")
     lines.append(f"wind_term={fmt_num(cdbg['wind_term'], 3)}")
     lines.append(f"frost_factor={fmt_num(cdbg['frost_factor'], 3)}")
-    lines.append(f"baseline_pump_seconds_normal={BASELINE_PUMP_SECONDS_NORMAL}")
+    lines.append(f"baseline_pump_seconds_normal={baseline_pump_seconds_normal()}")
     lines.append(f"min_pump_seconds_if_running={MIN_PUMP_SECONDS_IF_RUNNING}")
     lines.append("")
 
@@ -2546,7 +2664,7 @@ def build_report_object(
             },
             "climate_debug": {
                 **ensemble["cdbg"],
-                "baseline_pump_seconds_normal": BASELINE_PUMP_SECONDS_NORMAL,
+                "baseline_pump_seconds_normal": baseline_pump_seconds_normal(),
                 "min_pump_seconds_if_running": MIN_PUMP_SECONDS_IF_RUNNING,
             },
         },
@@ -3279,33 +3397,61 @@ def run_once(args) -> None:
             om_err=om_err,
         )
 
-        # Scoped to the currently-configured station -- otherwise switching
-        # station (dashboard settings panel) would seed the new location's
-        # schedule (next_watering_epoch, last-completed-event) off a
-        # different physical garden's prior history. Pre-station-tracking
-        # rows (station="") are excluded here too, not guessed at.
-        db_rows = IrrigationDecision.objects.filter(station=location.station)
-        schedule = apply_irrigation_schedule(
-            now_local=now_local,
-            now_utc=now_utc,
-            location=location,
-            source_mode=source_mode,
-            yr_rows=yr_rows,
-            owm_rows=owm_rows,
-            om_rows=om_rows,
-            ensemble=ensemble,
-            db_rows=db_rows,
-            recent_rain_mm=recent_rain_mm,
-        )
-        ensemble["schedule"] = schedule
-        ensemble["pct"] = schedule["command_percent"]
-        ensemble["label"] = schedule["decision_label"]
-        ensemble["pump_seconds"] = schedule["commanded_pump_seconds"]
-        ensemble["summary_text"] = schedule["summary_text"]
-        ensemble["overall_outlook"] = (
-            f"{ensemble['overall_outlook']} Event mode: "
-            f"{schedule['decision_code'].lower()}."
-        )
+        # Forecast display stats (24h temp/RH range shown on the dashboard's
+        # Temp/Humidity tiles) are informational, not an irrigation decision
+        # -- computed regardless of CITRUS_MODE so they keep showing with
+        # irrigation switched off. Everything else derived from these below
+        # (the actual decision/DB row/MQTT publish) stays gated.
+        temp_stats = ensemble_temp_stats(yr_rows=yr_rows, owm_rows=owm_rows, om_rows=om_rows, now_utc=now_utc)
+        rh_stats = ensemble_rh_stats(yr_rows=yr_rows, owm_rows=owm_rows, om_rows=om_rows, now_utc=now_utc)
+
+        # CITRUS_MODE == "off" (the default -- see its own definition above)
+        # is the master kill switch: skip computing a decision at all, not
+        # just skip publishing one. Nothing gets written to the
+        # IrrigationDecision table or next_watering.json below, and the MQTT
+        # publish block further down never runs, since schedule stays None.
+        if CITRUS_MODE == "on":
+            # Scoped to the currently-configured station -- otherwise switching
+            # station (dashboard settings panel) would seed the new location's
+            # schedule (next_watering_epoch, last-completed-event) off a
+            # different physical garden's prior history. Pre-station-tracking
+            # rows (station="") are excluded here too, not guessed at.
+            db_rows = IrrigationDecision.objects.filter(station=location.station)
+            schedule = apply_irrigation_schedule(
+                now_local=now_local,
+                now_utc=now_utc,
+                location=location,
+                source_mode=source_mode,
+                yr_rows=yr_rows,
+                owm_rows=owm_rows,
+                om_rows=om_rows,
+                ensemble=ensemble,
+                db_rows=db_rows,
+                recent_rain_mm=recent_rain_mm,
+            )
+            ensemble["schedule"] = schedule
+            ensemble["pct"] = schedule["command_percent"]
+            ensemble["label"] = schedule["decision_label"]
+            ensemble["pump_seconds"] = schedule["commanded_pump_seconds"]
+            ensemble["summary_text"] = schedule["summary_text"]
+            ensemble["overall_outlook"] = (
+                f"{ensemble['overall_outlook']} Event mode: "
+                f"{schedule['decision_code'].lower()}."
+            )
+        else:
+            schedule = None
+            ensemble["schedule"] = {
+                "tmin24_c": temp_stats.get("tmin24_c"),
+                "tmean72_c": temp_stats.get("tmean72_c"),
+                "tmax24_c": temp_stats.get("tmax24_c"),
+                "rhmin24_pct": rh_stats.get("rhmin24_pct"),
+                "rhmax24_pct": rh_stats.get("rhmax24_pct"),
+            }
+            ensemble["pct"] = 0
+            ensemble["label"] = "OFF"
+            ensemble["pump_seconds"] = 0
+            ensemble["summary_text"] = "Irrigation disabled."
+            ensemble["overall_outlook"] = f"{ensemble['overall_outlook']} Irrigation disabled."
 
         comparison_rows = build_comparison_rows(
             owm_rows=owm_rows or [],
@@ -3376,8 +3522,9 @@ def run_once(args) -> None:
         sys.stdout.flush()
 
         atomic_write_text(args.output, report)
-        upsert_irrigation_decision(schedule["db_row"])
-        atomic_write_json(NEXT_WATERING_JSON, schedule["json_payload"])
+        if schedule is not None:
+            upsert_irrigation_decision(schedule["db_row"])
+            atomic_write_json(NEXT_WATERING_JSON, schedule["json_payload"])
         report_obj['next_run_epoch'] = next_quantized_run_epoch(now_local)
         atomic_write_json(WEATHER_CACHE_JSON, report_obj)
         append_metar_log_row(report_obj.get("current"), location.tz_name)
@@ -3385,7 +3532,9 @@ def run_once(args) -> None:
         # Publish the next-two-events schedule to the pumps. A broker outage
         # must not fail the whole run (the JSON cache on disk is the source of
         # truth and the next cron run will retry), so failures only warn.
-        if MQTT_SEND_ENABLED:
+        # schedule is None with CITRUS_MODE == "off" -- see above -- nothing
+        # to publish, and nothing was even computed to publish.
+        if MQTT_SEND_ENABLED and schedule is not None:
             try:
                 detail = publish_mqtt_schedule(schedule["json_payload"])
                 print(f"MQTT: published {detail}", file=sys.stderr)

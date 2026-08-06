@@ -26,8 +26,14 @@ def _render_page(request, template_name, active_page):
     lang = services.current_lang()
     strings = STRINGS[lang]
     i18n_json = json.dumps(strings, ensure_ascii=False).replace("</", "<\\/")
+    # citrus_on gates the Irrigation nav link and the Station settings
+    # fields (see base.html) -- when off (the default), weather_mqtt.py
+    # never computes or publishes an irrigation decision either (see its
+    # own CITRUS_MODE), so there's nothing there to look at.
+    citrus_on = services.api_config_get().get("citrus_mode") == "on"
     response = render(request, template_name, {
         "lang": lang, "t": strings, "i18n_json": i18n_json, "active_page": active_page,
+        "citrus_on": citrus_on,
     })
     return _no_store(response)
 

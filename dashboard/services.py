@@ -40,7 +40,10 @@ WEATHER_CACHE = DATA_DIR / "weather_cache.json"
 NEXT_WATERING = DATA_DIR / "next_watering.json"
 PUMP_ACKS = DATA_DIR / "pump_acks.json"
 SITE_CONFIG = DATA_DIR / "site_config.json"
-SITE_CONFIG_FIELDS = ("station", "broker", "root_topic", "lang", "sun_projection", "sun_view", "mqtt_pub_password")
+SITE_CONFIG_FIELDS = (
+    "station", "broker", "root_topic", "lang", "sun_projection", "sun_view",
+    "mqtt_pub_password", "pump_flow_rate_lpm", "pump_target_volume_l", "citrus_mode",
+)
 WEATHER_MQTT_SCRIPT = BASE_DIR / "weather_mqtt.py"
 REFRESH_TIMEOUT_SECONDS = 90
 
@@ -95,6 +98,27 @@ DEFAULT_SUN_PROJECTION = "linear"
 # (dot vs cross) this also switches.
 SUN_VIEWS = ("down", "up")
 DEFAULT_SUN_VIEW = "down"
+
+# Mirrors weather_mqtt.py's own DEFAULT_PUMP_FLOW_RATE_LPM/
+# DEFAULT_PUMP_TARGET_VOLUME_L (same duplication pattern as DEFAULT_STATION
+# above) -- together these ARE the baseline ("100%") pump duration now
+# (target_volume / flow_rate), not a fixed time constant. 24L / 12L/min =
+# 120s, the exact duration the old hardcoded BASELINE_PUMP_SECONDS_NORMAL
+# used, so these defaults change nothing for an install that never touches
+# the fields.
+DEFAULT_PUMP_FLOW_RATE_LPM = 12.0
+DEFAULT_PUMP_TARGET_VOLUME_L = 24.0
+
+# Master kill switch for the whole irrigation-decision/pump-command pipeline
+# -- mirrors weather_mqtt.py's own CITRUS_MODES/DEFAULT_CITRUS_MODE/
+# CITRUS_MODE (see that module's own comment for the full rationale; this
+# is deliberately not named/labeled anything like "irrigation enabled" in
+# the dashboard UI, by explicit design choice -- see the settings panel's
+# "citrus mode" toggle). "off" (the default) also hides the Irrigation nav
+# link and the Station settings fields (see dashboard/views.py) -- nothing
+# to look at there when nothing's being computed or published.
+CITRUS_MODES = ("on", "off")
+DEFAULT_CITRUS_MODE = "off"
 
 
 def current_lang() -> str:
@@ -243,6 +267,9 @@ def api_config_get() -> dict:
         cfg["root_topic"] = DEFAULT_ROOT_TOPIC
         cfg["sun_projection"] = DEFAULT_SUN_PROJECTION
         cfg["sun_view"] = DEFAULT_SUN_VIEW
+        cfg["pump_flow_rate_lpm"] = DEFAULT_PUMP_FLOW_RATE_LPM
+        cfg["pump_target_volume_l"] = DEFAULT_PUMP_TARGET_VOLUME_L
+        cfg["citrus_mode"] = DEFAULT_CITRUS_MODE
         return cfg
     try:
         data = json.loads(SITE_CONFIG.read_text(encoding="utf-8"))
@@ -257,6 +284,21 @@ def api_config_get() -> dict:
     cfg["sun_projection"] = cfg["sun_projection"] if cfg["sun_projection"] in SUN_PROJECTIONS else DEFAULT_SUN_PROJECTION
     cfg["sun_view"] = cfg["sun_view"] if cfg["sun_view"] in SUN_VIEWS else DEFAULT_SUN_VIEW
     cfg["mqtt_pub_password"] = str(cfg["mqtt_pub_password"] or "")
+    # Same "optional, not required" contract as every other field -- blank/
+    # unparseable/non-positive falls back to the default rather than
+    # surfacing a broken value the panel would just have to reject anyway.
+    try:
+        flow_rate = float(cfg["pump_flow_rate_lpm"])
+        cfg["pump_flow_rate_lpm"] = flow_rate if flow_rate > 0 else DEFAULT_PUMP_FLOW_RATE_LPM
+    except (TypeError, ValueError):
+        cfg["pump_flow_rate_lpm"] = DEFAULT_PUMP_FLOW_RATE_LPM
+    try:
+        target_volume = float(cfg["pump_target_volume_l"])
+        cfg["pump_target_volume_l"] = target_volume if target_volume > 0 else DEFAULT_PUMP_TARGET_VOLUME_L
+    except (TypeError, ValueError):
+        cfg["pump_target_volume_l"] = DEFAULT_PUMP_TARGET_VOLUME_L
+    citrus_mode = str(cfg["citrus_mode"] or "").strip().lower()
+    cfg["citrus_mode"] = citrus_mode if citrus_mode in CITRUS_MODES else DEFAULT_CITRUS_MODE
     return cfg
 
 
@@ -299,6 +341,33 @@ def api_config_save(payload: dict) -> dict:
     if sun_view and sun_view not in SUN_VIEWS:
         raise ValueError(f"'sun_view' must be one of {', '.join(SUN_VIEWS)}.")
     cfg["sun_view"] = sun_view or DEFAULT_SUN_VIEW
+
+    # Together these ARE the baseline ("100%") pump duration weather_mqtt.py
+    # computes every other percentage from (see its baseline_pump_seconds_normal()) --
+    # unlike every other field here, a bad value doesn't just mis-set a
+    # label, it feeds a real hardware command, so blank/non-positive/
+    # unparseable is rejected outright rather than silently substituting a
+    # default the user might not notice took effect.
+    for key, default in (
+        ("pump_flow_rate_lpm", DEFAULT_PUMP_FLOW_RATE_LPM),
+        ("pump_target_volume_l", DEFAULT_PUMP_TARGET_VOLUME_L),
+    ):
+        raw = payload.get(key)
+        if raw in (None, ""):
+            cfg[key] = default
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"'{key}' must be a positive number.")
+        if value <= 0:
+            raise ValueError(f"'{key}' must be a positive number.")
+        cfg[key] = value
+
+    citrus_mode = str(payload.get("citrus_mode") or "").strip().lower()
+    if citrus_mode and citrus_mode not in CITRUS_MODES:
+        raise ValueError(f"'citrus_mode' must be one of {', '.join(CITRUS_MODES)}.")
+    cfg["citrus_mode"] = citrus_mode or DEFAULT_CITRUS_MODE
 
     tmp = SITE_CONFIG.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -4,13 +4,12 @@
 
 {% block content %}
 
-  <!-- Not .layout -- that class is tuned for weather.html's right column,
-       sized to max-content (i.e. to its rain charts' own fixed width).
-       col-right has no content of its own here yet, so max-content would
-       resolve to 0 and the page would look like a single column instead of
-       two. .g-2-1 gives it a real, visible share of the width (2fr:1fr)
-       regardless of what's actually in it. -->
-  <div class="grid g-2-1">
+  <!-- Same .layout as weather.html now that col-right has a real chart to
+       size against -- col-left ends up the same width on both pages
+       (1fr, sized to whatever's left), and col-right gets max-content's
+       full width for the graph instead of a fixed, possibly-too-narrow
+       fraction. -->
+  <div class="layout">
     <div class="col-left">
 
       <div class="card">
@@ -73,10 +72,17 @@
 
     </div>
 
-    <!-- Reserved for future content -- deliberately empty for now. -->
-    <div class="col-right"></div>
+    <div class="col-right">
+      <div class="card">
+        <div class="stk-header">
+          {{ t.chart_mean }}
+          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        </div>
+        <div class="chart-scroll"><canvas id="chart-rain-mean"></canvas></div>
+      </div>
+    </div>
   </div>
 
 {% endblock %}
 
-{% block page_script %}<script src="/static/irrigation.js"></script>{% endblock %}
+{% block page_script %}<script src="/static/charts.js"></script><script src="/static/irrigation.js"></script>{% endblock %}
