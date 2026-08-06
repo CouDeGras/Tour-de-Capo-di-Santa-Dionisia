@@ -4,62 +4,77 @@
 
 {% block content %}
 
-  <div class="card">
-    <div class="card-label">{{ t.card_next_irrigation }}</div>
-    <div class="countdown-row">
-      <div id="countdown">—</div>
-      <span class="countdown-sep">|</span>
-      <span id="ring-pct">—</span>
-    </div>
-    <div id="event-list" class="event-list"></div>
-    <div class="query-row">
-      <span class="query-label">{{ t.metric_demand }}</span>
-      <span id="demand-value">—</span>
-    </div>
-  </div>
+  <!-- Not .layout -- that class is tuned for weather.html's right column,
+       sized to max-content (i.e. to its rain charts' own fixed width).
+       col-right has no content of its own here yet, so max-content would
+       resolve to 0 and the page would look like a single column instead of
+       two. .g-2-1 gives it a real, visible share of the width (2fr:1fr)
+       regardless of what's actually in it. -->
+  <div class="grid g-2-1">
+    <div class="col-left">
 
-  <div class="card">
-    <div class="card-label">{{ t.card_history }}</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{{ t.th_date }}</th>
-            <th>{{ t.th_decision }}</th>
-            <th>{{ t.th_pct }}</th>
-            <th>{{ t.th_pump_s }}</th>
-            <th>{{ t.th_rain_mm }}</th>
-            <th>{{ t.th_tmin }}</th>
-            <th>{{ t.th_tmax }}</th>
-          </tr>
-        </thead>
-        <tbody id="history-body">
-          <tr><td colspan="7" class="tbl-empty">{{ t.loading }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+      <div class="card">
+        <div class="card-label">{{ t.card_next_irrigation }}</div>
+        <div class="countdown-row">
+          <div id="countdown">—</div>
+          <span class="countdown-sep">|</span>
+          <span id="ring-pct">—</span>
+        </div>
+        <div id="event-list" class="event-list"></div>
+        <div class="query-row">
+          <span class="query-label">{{ t.metric_demand }}</span>
+          <span id="demand-value">—</span>
+        </div>
+      </div>
 
-  <!-- Pump nodes: MQTT ACKs received from the ESP32s, by identifier/MAC -->
-  <div class="card">
-    <div class="card-label">{{ t.card_pump_nodes }}</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{{ t.th_node }}</th>
-            <th>{{ t.th_seen }}</th>
-            <th>{{ t.th_executed }}</th>
-            <th>{{ t.th_pump_s }}</th>
-            <th>{{ t.th_decision }}</th>
-            <th>{{ t.th_armed }}</th>
-          </tr>
-        </thead>
-        <tbody id="acks-body">
-          <tr><td colspan="6" class="tbl-empty">{{ t.loading }}</td></tr>
-        </tbody>
-      </table>
+      <div class="card">
+        <div class="card-label">{{ t.card_history }}</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t.th_date }}</th>
+                <th>{{ t.th_decision }}</th>
+                <th>{{ t.th_pct }}</th>
+                <th>{{ t.th_pump_s }}</th>
+                <th>{{ t.th_rain_mm }}</th>
+                <th>{{ t.th_tmin }}</th>
+                <th>{{ t.th_tmax }}</th>
+              </tr>
+            </thead>
+            <tbody id="history-body">
+              <tr><td colspan="7" class="tbl-empty">{{ t.loading }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pump nodes: MQTT ACKs received from the ESP32s, by identifier/MAC -->
+      <div class="card">
+        <div class="card-label">{{ t.card_pump_nodes }}</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t.th_node }}</th>
+                <th>{{ t.th_seen }}</th>
+                <th>{{ t.th_executed }}</th>
+                <th>{{ t.th_pump_s }}</th>
+                <th>{{ t.th_decision }}</th>
+                <th>{{ t.th_armed }}</th>
+              </tr>
+            </thead>
+            <tbody id="acks-body">
+              <tr><td colspan="6" class="tbl-empty">{{ t.loading }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
+
+    <!-- Reserved for future content -- deliberately empty for now. -->
+    <div class="col-right"></div>
   </div>
 
 {% endblock %}

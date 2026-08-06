@@ -3,7 +3,7 @@
   "broker": "broker.emqx.io:1883",
   "root_topic": "tour_genoise_de_capo_di_santa_dionisia",
   "mqtt_pub_password": "69PcHBSZ5k9#@h~",
-  "lang": "en",
+  "lang": "es",
   "sun_projection": "orthographic",
   "sun_view": "down"
 }

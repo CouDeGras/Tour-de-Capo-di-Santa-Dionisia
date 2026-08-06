@@ -51,6 +51,11 @@ header {
   background: transparent; color: var(--b);
   padding: 0.1rem;
   cursor: pointer;
+  /* Buttons don't inherit font-family from the page by default (they fall
+     back to the OS's UI font) -- never mattered while these only ever held
+     an SVG icon, but .icon-hover buttons now hold real text too (the
+     title/value labels). */
+  font-family: inherit;
 }
 .icon-btn:hover { opacity: 0.6; }
 .icon-btn:disabled { cursor: default; opacity: 0.6; }
@@ -79,21 +84,7 @@ header {
 }
 .config-panel-header .card-label { margin-bottom: 0; }
 
-/* ── Config tabs (General / Station) ── */
-.config-tabs { display: flex; gap: 1.2rem; border-bottom: 1px solid var(--b); margin-bottom: 1.2rem; }
-.config-tab-btn {
-  font-family: inherit; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  background: transparent; color: var(--b); border: none;
-  padding: 0 0 0.6rem; opacity: 0.5;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  cursor: pointer;
-}
-.config-tab-btn:hover { opacity: 0.8; }
-.config-tab-btn.active { opacity: 1; border-bottom-color: var(--b); }
-.config-tab { display: none; }
-.config-tab.active { display: flex; }
-
-.config-body { flex-direction: column; gap: 0.9rem; }
+.config-body { display: flex; flex-direction: column; gap: 0.9rem; }
 .config-field { display: flex; flex-direction: column; gap: 0.36rem; }
 .config-field-label {
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
@@ -122,6 +113,63 @@ header {
 .config-icon-row { display: flex; align-items: center; }
 .config-icon-row > * + * { margin-left: 0.9rem; padding-left: 0.9rem; border-left: 1px solid var(--b); }
 
+/* ── Icon hover label (collapsed until its icon is hovered/focused) ── */
+/* Each icon in .config-icon-row IS one of these buttons (not a button
+   wrapped in something else) -- so hovering/clicking anywhere in its
+   expanded area, not just the small 30px icon, triggers and reveals it.
+   The hovered/focused one's label doesn't just nudge its immediate
+   neighbor over a little -- flex-grow claims the row's own free width
+   (whatever that is; not a fixed guess), reading as "this is the one
+   thing in the row right now" instead of a cramped inline tooltip. Every
+   OTHER icon fully collapses (max-width, opacity, and the divider rule's
+   own margin/padding/border all zeroed via :has() -- see below) rather
+   than just dimming, so the hovered one gets their reclaimed width too,
+   not only whatever was already free; the divider line vanishes even next
+   to the hovered one itself, since a lone "|" no longer separates it from
+   anything still visible. max-width (not width) is what's animated
+   throughout, on both ends -- collapsing and un-collapsing -- since
+   transitioning to/from `auto`-sized or flex-basis-implied widths doesn't
+   animate smoothly in any browser; a concrete number on both ends does.
+   :focus (not :focus-within -- there's no nested focusable child anymore,
+   the button itself receives focus) keeps this reachable via keyboard tab
+   focus, not only a mouse. justify-content/opacity overrides below undo
+   .icon-btn's own centering and hover-dim, both wrong once .icon-btn and
+   .icon-hover are the same element. */
+.icon-hover {
+  display: inline-flex; align-items: center; justify-content: flex-start;
+  flex: 0 0 auto; max-width: 3rem; opacity: 1;
+  transition: opacity 0.15s ease, flex-grow 0.18s ease, max-width 0.18s ease,
+    margin-left 0.18s ease, padding-left 0.18s ease, border-left-width 0.18s ease;
+}
+.icon-hover:hover, .icon-hover:focus { opacity: 1; }
+.config-icon-row:has(.icon-hover:hover, .icon-hover:focus) > .icon-hover {
+  border-left-width: 0;
+}
+.config-icon-row:has(.icon-hover:hover, .icon-hover:focus) > .icon-hover:not(:hover):not(:focus) {
+  max-width: 0; opacity: 0; overflow: hidden;
+  margin-left: 0; padding-left: 0;
+}
+.icon-hover:hover, .icon-hover:focus { flex-grow: 1; max-width: 40rem; }
+
+.icon-hover-label {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 0 0 auto;
+  max-width: 0; margin-left: 0; opacity: 0; overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 0.18s ease, margin-left 0.18s ease, opacity 0.12s ease, flex-grow 0.18s ease;
+}
+.icon-hover:hover .icon-hover-label,
+.icon-hover:focus .icon-hover-label {
+  flex: 1 1 auto; max-width: 100%; margin-left: 0.5rem; opacity: 1;
+}
+/* Same styling as .config-field-label (the "AIRPORT CODE (ICAO)"-style
+   headings further down) -- this line names the setting. */
+.icon-hover-title { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+/* Same styling the removed .config-field-hint captions used to have --
+   this line is what the setting is currently at (e.g. "Linear"), dimmer
+   and smaller than the title above it. */
+.icon-hover-value { font-size: 0.72rem; font-weight: 300; opacity: 0.55; margin-top: 0.15rem; }
+
 /* ── Citrus mode toggle (cosmetic -- see app.js) ── */
 #cfg-citrus-toggle .icon-citrus-on { display: none; }
 #cfg-citrus-toggle[aria-pressed="true"] .icon-citrus-on { display: block; }
@@ -137,9 +185,6 @@ header {
 .icon-cycle-btn[data-value="down"] .icon-value-down,
 .icon-cycle-btn[data-value="up"] .icon-value-up { display: block; }
 
-/* ── Language toggle (globe icon button, cycles en/fr/it) ── */
-.lang-toggle { display: flex; align-items: center; gap: 0.6rem; }
-.lang-toggle-label { font-size: 0.9rem; font-weight: 600; }
 
 .config-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
 .btn {
@@ -203,7 +248,10 @@ main { padding: 1.2rem 1.8rem; display: flex; flex-direction: column; gap: 0.9re
 
 .query-row { display: flex; align-items: baseline; gap: 0.72rem; margin-top: 0.9rem; border-top: 1px solid var(--b); padding-top: 0.78rem; }
 .query-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap; }
-#query-countdown { font-size: 0.86rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+/* #demand-value (irrigation page's water-demand readout, same .query-row) --
+   same style as #query-countdown, it's the same kind of secondary number
+   next to a .query-label, just not a countdown. */
+#query-countdown, #demand-value { font-size: 0.86rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
 /* Weather page's standalone "next reading" card -- same countdown styling as
    #query-countdown above, just larger since it's the card's only content
@@ -239,17 +287,18 @@ main { padding: 1.2rem 1.8rem; display: flex; flex-direction: column; gap: 0.9re
 
 
 
-/* ── Metric cards — minuscule ── */
-.metric-card  { text-align: center; padding: 0.48rem 0.36rem; }
-.metric-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; margin-bottom: 0.18rem; }
+/* ── Metric cards (temp/humidity/wind/VPD) ── */
+/* .metric-card itself sets nothing anymore -- card padding, alignment and
+   the heading (.card-label) are exactly the local-time/location cards' own
+   styling now, not a separate smaller/centered variant, so these read as
+   the same kind of card instead of a visually distinct "minuscule" one. */
 .metric-value { font-size: 1.06rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1; margin-bottom: 0.12rem; }
 .metric-sub   { font-size: 0.53rem; font-weight: 300; }
 
-/* ── Metric cards — temp/humidity, not minuscule (see weather.html) ── */
-.metric-card-lg { padding: 0.9rem 0.6rem; }
-.metric-card-lg .metric-label { font-size: 0.72rem; margin-bottom: 0.3rem; }
+/* ── Metric cards — temp/humidity/wind/VPD, not minuscule (see weather.html) ── */
 .metric-card-lg .metric-value { font-size: 2.6rem; margin-bottom: 0.18rem; }
-.metric-card-lg .metric-sub   { font-size: 0.68rem; }
+/* Same size as .card-subtext (location coordinates, local date). */
+.metric-card-lg .metric-sub   { font-size: 0.82rem; }
 
 /* ── Stacked chart section headers ── */
 .stk-header {
@@ -322,11 +371,11 @@ footer { padding: 1.2rem 1.8rem; max-width: 1320px; margin: 0 auto; }
 
 /* ── Responsive ── */
 @media (max-width: 1032px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout, .g-2-1 { grid-template-columns: 1fr; }
   .card-top { flex-direction: column; align-items: flex-start; }
   .top-aside { flex-direction: row; align-self: stretch; justify-content: space-between; }
 
-  /* Below this breakpoint .layout is already a single column, so there's no
+  /* Below this breakpoint .layout/.g-2-1 are already a single column, so there's no
      wide desktop column to size to content anymore. Flex/grid items default
      to a minimum width equal to their content's natural size, which is what
      let a wide table force its column -- and the page -- past the viewport

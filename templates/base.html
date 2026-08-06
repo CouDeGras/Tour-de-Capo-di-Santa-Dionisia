@@ -76,11 +76,7 @@
         </svg>
       </button>
     </div>
-    <div class="config-tabs">
-      <button type="button" class="config-tab-btn active" data-tab="general">{{ t.tab_general }}</button>
-      <button type="button" class="config-tab-btn" data-tab="station">{{ t.tab_station }}</button>
-    </div>
-    <div class="config-body config-tab active" data-tab="general">
+    <div class="config-body">
       <!-- Every hidden input feeding this row's icons, kept out of
            .config-icon-row itself -- if they sat between the visible
            buttons in the DOM they'd break the row's "adjacent sibling"
@@ -92,31 +88,45 @@
       <input type="hidden" id="cfg-lang">
       <input type="hidden" id="cfg-sun-projection">
       <input type="hidden" id="cfg-sun-view">
-      <!-- One icon toolbar, not four separate labeled fields -- each button
-           only needs its title/aria-label tooltip (same as the header's
-           refresh/settings/quit icons) since its own icon already encodes
-           state (or, for language, the adjoining live text label). The
-           vertical rule between each icon is style.css's .config-icon-row
-           > * + * rule -- same 1px solid var(--b) line previously drawn
-           once above the danger zone, now reused between every icon
-           instead. -->
+      <!-- One icon toolbar, not five separate labeled fields -- each icon
+           IS its own button (not a button wrapped in something else), so
+           clicking anywhere in its hover-expanded area triggers it, not
+           just the small 30px icon. .icon-hover-label (see style.css)
+           expands that whole button inline (pushing the rest of the row
+           over, claiming its free width -- not a floating popover) until
+           it's hovered/focused. Two lines inside the label: .icon-hover-title
+           (the field's name, same styling as .config-field-label below)
+           and .icon-hover-value (what the option is currently set to, in
+           the smaller/dimmer caption styling that used to be
+           .config-field-hint) -- clear cache has no value line, it's an
+           action not a setting. title/aria-label attributes stay too, for
+           the native tooltip and for screen readers. The vertical rule
+           between each icon is style.css's .config-icon-row > * + * rule --
+           same 1px solid var(--b) line previously drawn once above the
+           danger zone, now reused between every icon instead (and hidden
+           entirely while any one of them is expanded). -->
       <div class="config-icon-row">
         <!-- No dropdown -- cfg-lang just holds the current code (en/fr/it),
              cycled by the globe button; app.js's generic fields loop reads/
              writes its .value exactly like it would a <select>'s. -->
-        <span class="lang-toggle">
-          <button id="cfg-lang-btn" class="icon-btn" type="button" aria-label="{{ t.field_lang }}" title="{{ t.field_lang }}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
-              <path d="M0 0h24v24H0z" fill="none" />
-              <path fill="currentColor" d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95a15.7 15.7 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.92 8M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56A8 8 0 0 1 5.08 16m2.95-8H5.08a8 8 0 0 1 4.33-3.56A15.7 15.7 0 0 0 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z" />
-            </svg>
-          </button>
-          <span id="cfg-lang-label" class="lang-toggle-label">English</span>
-        </span>
+        <button id="cfg-lang-btn" class="icon-hover icon-btn" type="button" aria-label="{{ t.field_lang }}" title="{{ t.field_lang }}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path fill="currentColor" d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m6.93 6h-2.95a15.7 15.7 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.92 8M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96M4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56A8 8 0 0 1 5.08 16m2.95-8H5.08a8 8 0 0 1 4.33-3.56A15.7 15.7 0 0 0 8.03 8M12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96M14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2m.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56M16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2z" />
+          </svg>
+          <span class="icon-hover-label">
+            <span class="icon-hover-title">{{ t.field_lang }}</span>
+            <span id="cfg-lang-label" class="icon-hover-value">English</span>
+          </span>
+        </button>
         <!-- cfg-sun-projection holds 'linear'/'orthographic'; the button
              shows only the icon matching that value (see .icon-cycle-btn
-             in style.css) and cycles to the other one on click. -->
-        <button type="button" class="icon-btn icon-cycle-btn" data-field="sun_projection" data-values="linear,orthographic" data-value="linear" aria-label="{{ t.field_sun_projection }}" title="{{ t.field_sun_projection }}">
+             in style.css) and cycles to the other one on click.
+             data-labels is the hover text for each data-values entry, same
+             order -- app.js's syncCycleBtn shows whichever one matches the
+             current value, not the field's own name (see .icon-hover-label
+             inside it). -->
+        <button type="button" class="icon-hover icon-btn icon-cycle-btn" data-field="sun_projection" data-values="linear,orthographic" data-labels="{{ t.sun_projection_linear }},{{ t.sun_projection_orthographic }}" data-value="linear" aria-label="{{ t.field_sun_projection }}" title="{{ t.field_sun_projection }}">
           <svg class="icon-value-linear" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M15 3v4.59L7.59 15H3v6h6v-4.58L16.42 9H21V3m-4 2h2v2h-2M5 17h2v2H5" />
@@ -125,9 +135,13 @@
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M5 4h2v7h6v6h7v2H5zm2 13h4v-4H7z" />
           </svg>
+          <span class="icon-hover-label">
+            <span class="icon-hover-title">{{ t.field_sun_projection }}</span>
+            <span class="icon-hover-value">{{ t.sun_projection_linear }}</span>
+          </span>
         </button>
         <!-- Same pattern, cfg-sun-view holds 'down'/'up'. -->
-        <button type="button" class="icon-btn icon-cycle-btn" data-field="sun_view" data-values="down,up" data-value="down" aria-label="{{ t.field_sun_view }}" title="{{ t.field_sun_view }}">
+        <button type="button" class="icon-hover icon-btn icon-cycle-btn" data-field="sun_view" data-values="down,up" data-labels="{{ t.sun_view_down_label }},{{ t.sun_view_up_label }}" data-value="down" aria-label="{{ t.field_sun_view }}" title="{{ t.field_sun_view }}">
           <svg class="icon-value-down" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M14 23.2v-2q2.925 0 4.963-2.037T21 14.2h2q0 1.875-.712 3.513t-1.925 2.85t-2.85 1.925T14 23.2m0-4v-2q1.25 0 2.125-.875T17 14.2h2q0 2.075-1.463 3.538T14 19.2m-8.45 3.375q-.375 0-.75-.15T4.125 22l-3.55-3.55q-.275-.3-.425-.675t-.15-.75q0-.4.15-.763t.425-.637L3.75 12.45q.575-.575 1.425-.587t1.425.562l1.25 1.25l.7-.7l-1.25-1.25q-.575-.575-.575-1.4t.575-1.4L8.725 7.5q.575-.575 1.413-.575t1.412.575l1.25 1.25l.7-.7l-1.25-1.25q-.575-.575-.575-1.412t.575-1.413L15.425.8q.3-.3.675-.45t.75-.15t.738.15t.662.45l3.55 3.55q.3.275.438.638t.137.762q0 .375-.137.75t-.438.675l-3.175 3.175q-.575.575-1.412.575T15.8 10.35L14.55 9.1l-.7.7l1.25 1.25q.575.575.563 1.413t-.588 1.412l-1.4 1.4q-.575.575-1.412.575t-1.413-.575l-1.25-1.25l-.7.7l1.25 1.25q.575.575.563 1.425t-.588 1.425L6.95 22q-.275.275-.638.425t-.762.15m0-1.975l1.05-1.05L3.05 16L2 17.05zm2.125-2.125l1.05-1.05l-3.55-3.55l-1.05 1.05zm9.55-9.55l1.05-1.05l-3.55-3.55l-1.05 1.05zM19.35 6.8l1.05-1.05l-3.55-3.55l-1.05 1.05z" />
@@ -136,10 +150,16 @@
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="m21.9 8.9l-1.7 1l-4-6.9l1.7-1zm-12.1-1l3 5.2l6.1-3.5l-3-5.2zm1.6 4.8l-2-3.5l-4.3 2.5l2 3.5zm-9.3 1.9l1 1.7l2.6-1.5l-1-1.7zm10-.6l-.3-.4l-4.3 2.5l.3.4c.2.3.5.6.8.8L7 22h2l1.4-4.3h.1L12 22h2l-1.9-5.6c.5-.7.5-1.6 0-2.4" />
           </svg>
+          <span class="icon-hover-label">
+            <span class="icon-hover-title">{{ t.field_sun_view }}</span>
+            <span class="icon-hover-value">{{ t.sun_view_down_label }}</span>
+          </span>
         </button>
         <!-- Purely cosmetic -- toggles its own icon and remembers the state
-             (localStorage, see app.js) but isn't wired to anything else. -->
-        <button id="cfg-citrus-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="{{ t.field_citrus_mode }}" title="{{ t.field_citrus_mode }}">
+             (localStorage, see app.js) but isn't wired to anything else.
+             cfg-citrus-label shows the on/off state on hover, not the
+             field name, same as the other icons -- see app.js. -->
+        <button id="cfg-citrus-toggle" class="icon-hover icon-btn" type="button" aria-pressed="false" aria-label="{{ t.field_citrus_mode }}" title="{{ t.field_citrus_mode }}">
           <svg class="icon-citrus-on" xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M9 15.9c-2.1-.2-3.9-1-5-2.3c-.8 0-1.6-.5-1.9-1.3s0-1.6.7-2.1c.1-3 2.8-6.1 6.9-7.5S18 2.1 20 4.4c.8 0 1.6.5 1.9 1.3s0 1.6-.7 2.1q0 1.2-.6 2.4C19.4 9.5 18 9 16.5 9c-3.9 0-7.2 3-7.5 6.9m13 .6c0 3-2.5 5.5-5.5 5.5S11 19.5 11 16.5s2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5M13.3 18l2.3-1.5l-2.3-1.5q-.3.75-.3 1.5c0 .75.1 1 .3 1.5m2.7-.6l-2.1 1.4c.5.6 1.3 1 2.1 1.2zm0-4.3c-.8.1-1.6.5-2.1 1.2l2.1 1.4zm1 2.5l2.1-1.4c-.5-.6-1.3-1-2.1-1.2zm2.1 3.2L17 17.4v2.5c.8-.1 1.6-.5 2.1-1.1m.9-2.3q0-.75-.3-1.5l-2.3 1.5l2.3 1.5q.3-.75.3-1.5" />
@@ -148,20 +168,25 @@
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M22.1 21.5L2.4 1.7L1.1 3l3.3 3.3c-1 1.2-1.5 2.6-1.6 3.9c-.7.5-1 1.3-.7 2.1s1.1 1.3 1.9 1.3c1.1 1.3 2.9 2.1 5 2.3c.1-1.4.6-2.6 1.3-3.7l1.5 1.5c-.5.8-.8 1.8-.8 2.8c0 3 2.5 5.5 5.5 5.5c1 0 2-.3 2.8-.8l1.5 1.5zm-9.1-5c0-.5.1-.9.3-1.4l1.7 1.7l-1.7 1.2q-.3-.75-.3-1.5m.9 2.3l1.8-1.2l.3.3V20c-.8-.2-1.6-.6-2.1-1.2m3.1 1.1v-1l.8.8c-.3.1-.5.2-.8.2m3-3.1v-.3q0-.75-.3-1.5l-.9.6l-.7-.7l1-.7c-.5-.6-1.3-1-2.1-1.2v.8l-2.4-2.4c.6-.2 1.3-.4 1.9-.4c3 0 5.5 2.5 5.5 5.5c0 .7-.1 1.3-.4 1.9zm-7-7L7.1 3.9c.8-.5 1.7-.9 2.6-1.2C13.8 1.3 18 2.1 20 4.4c.8 0 1.6.5 1.9 1.3s0 1.6-.7 2.1q0 1.2-.6 2.4C19.4 9.5 18 9 16.5 9c-1.2 0-2.4.3-3.5.8" />
           </svg>
+          <span class="icon-hover-label">
+            <span class="icon-hover-title">{{ t.field_citrus_mode }}</span>
+            <span id="cfg-citrus-label" class="icon-hover-value">{{ t.citrus_off_label }}</span>
+          </span>
         </button>
         <!-- Clear cache: was its own "danger zone" section with a border
              above it; now just the last icon in this same row, wiped
              state and all still handled the same way (see app.js and
              dashboard/services.py's api_clear_cache). -->
-        <button id="config-clear-cache" class="icon-btn" type="button" aria-label="{{ t.field_clear_cache }}" title="{{ t.field_clear_cache }}">
+        <button id="config-clear-cache" class="icon-hover icon-btn" type="button" aria-label="{{ t.field_clear_cache }}" title="{{ t.field_clear_cache }}">
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0z" fill="none" />
             <path fill="currentColor" d="M15 13h1.5v2.82l2.44 1.41l-.75 1.3L15 16.69zm8 3c0 3.87-3.13 7-7 7c-1.91 0-3.64-.76-4.9-2H8c-1.1 0-2-.9-2-2V7h12v2.29c2.89.86 5 3.54 5 6.71m-7-5c-2.76 0-5 2.24-5 5s2.24 5 5 5s5-2.24 5-5s-2.24-5-5-5m3-7v2H5V4h3.5l1-1h5l1 1z" />
           </svg>
+          <span class="icon-hover-label">
+            <span class="icon-hover-title">{{ t.field_clear_cache }}</span>
+          </span>
         </button>
       </div>
-    </div>
-    <div class="config-body config-tab" data-tab="station">
       <label class="config-field">
         <span class="config-field-label">{{ t.field_station }}</span>
         <input type="text" id="cfg-station" maxlength="4" pattern="[A-Za-z]{4}" placeholder="ZSNJ" autocapitalize="characters" autocomplete="off" spellcheck="false">

@@ -923,16 +923,29 @@ function renderRainCharts(rows) {
   const axisYr  = combinedAxis([yrRain],  [yrTemps]);
   const axisOm  = combinedAxis([omRain],  [omTemps]);
 
-  // Width, unlike height, IS still shared across all three -- computed once
-  // here rather than letting each drawGrid call independently measure its
-  // own canvas.parentElement. .layout's right column is sized to
-  // max-content (style.css), i.e. to however wide these very canvases end
-  // up; resizing chart 1's canvas shifts that column's width before chart 2
-  // gets measured, and again before chart 3, so three independent
-  // measurements landed on three different widths even though nCols
-  // (rows.length) is identical for all three. One shared measurement,
-  // taken before any of the three touches the DOM, keeps them identical.
-  const chartLayout = colLayout(document.getElementById('chart-rain-owm')?.parentElement, rows.length);
+  // Width, unlike height, IS still shared across all three -- but fixed at
+  // colLayout's own max cell size (8px), not measured against the
+  // container the way colLayout normally would. Measuring created a
+  // feedback loop with .layout's max-content-sized right column
+  // (style.css): a freshly loaded page starts with placeholder-sized
+  // canvases (no chart has been drawn yet), so the very first measurement
+  // read a tiny width and produced a small chart -- exactly what changing
+  // the language surfaced, since saving a new language reloads the whole
+  // page. Worse, each subsequent 60s refresh re-measured against the
+  // PREVIOUS cycle's now-slightly-wider canvas, climbing toward the true
+  // max size over several visibly growing steps instead of landing on it
+  // immediately -- that's the "grows 3 times" toggling citrus mode seemed
+  // to trigger, though citrus itself never touches these charts; it just
+  // happened to be clicked while a couple of those 60s cycles landed.
+  // Fixed removes the feedback loop entirely: nCols (rows.length) is the
+  // only input, so the width is deterministic from the very first paint.
+  // A container too narrow for it falls back to .chart-scroll's own
+  // horizontal scroll (that's what it's there for) rather than ever being
+  // measured and shrunk to fit.
+  const chartLayout = (() => {
+    const ML = 36, CELL = 8, GAP = Math.max(1, Math.floor(CELL * 0.15));
+    return { ML, CELL, GAP, colW: CELL + GAP, cssW: ML + rows.length * (CELL + GAP) };
+  })();
 
   drawGrid('chart-rain-owm', owmRain, {
     labels, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,

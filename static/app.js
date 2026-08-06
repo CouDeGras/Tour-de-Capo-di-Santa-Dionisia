@@ -85,18 +85,6 @@ async function triggerFullRefresh() {
   const saveBtn = document.getElementById('config-save');
   if (!overlay || !openBtn) return;
 
-  // Two tabs share one form/save button -- General (lang, sun path display)
-  // and Station (the METAR/MQTT fields that actually talk to the physical
-  // station). Both are only reachable from the one gear icon; the header's
-  // station nav link goes to the separate /stations page instead.
-  const tabBtns = overlay.querySelectorAll('.config-tab-btn');
-  const tabPanels = overlay.querySelectorAll('.config-tab');
-  const showTab = (name) => {
-    for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
-    for (const p of tabPanels) p.classList.toggle('active', p.dataset.tab === name);
-  };
-  for (const b of tabBtns) b.addEventListener('click', () => showTab(b.dataset.tab));
-
   const fields = {
     station: document.getElementById('cfg-station'),
     broker: document.getElementById('cfg-broker'),
@@ -120,8 +108,8 @@ async function triggerFullRefresh() {
   // actual code and goes through the same load/save loop as every other
   // field in `fields` above -- only the visible label next to the button
   // needs its own sync, on open and on every cycle.
-  const LANGS = ['en', 'fr', 'it'];
-  const LANG_LABELS = { en: 'English', fr: 'Français', it: 'Italiano' };
+  const LANGS = ['en', 'fr', 'it', 'es'];
+  const LANG_LABELS = { en: 'English', fr: 'Français', it: 'Italiano', es: 'Español' };
   const langBtn = document.getElementById('cfg-lang-btn');
   const langLabel = document.getElementById('cfg-lang-label');
   const setLangDisplay = (code) => { langLabel.textContent = LANG_LABELS[code] || code; };
@@ -136,22 +124,45 @@ async function triggerFullRefresh() {
   // toggle -- one click steps to the next value in data-values (a small
   // fixed comma-separated list, e.g. "linear,orthographic") and wraps
   // around. Which icon shows is pure CSS ([data-value=...] .icon-value-...,
-  // see style.css), driven by the button's own data-value attribute; this
-  // just keeps that attribute and the paired hidden input (in `fields`
-  // above, by data-field) in sync.
+  // see style.css), driven by the button's own data-value attribute. The
+  // hover label's .icon-hover-value line (a child of the button, not a
+  // sibling -- base.html; .icon-hover-title next to it is the field name
+  // and never changes) shows what that value actually means --
+  // "Linear"/"Ortho", say -- taken from data-labels (parallel to
+  // data-values, same order).
   const cycleBtns = overlay.querySelectorAll('.icon-cycle-btn');
   const syncCycleBtn = (btn) => {
-    btn.dataset.value = fields[btn.dataset.field].value || btn.dataset.values.split(',')[0];
+    const values = btn.dataset.values.split(',');
+    const value = fields[btn.dataset.field].value || values[0];
+    btn.dataset.value = value;
+    const label = btn.querySelector('.icon-hover-value');
+    if (label && btn.dataset.labels) {
+      label.textContent = btn.dataset.labels.split(',')[values.indexOf(value)] ?? label.textContent;
+    }
   };
   for (const btn of cycleBtns) {
     btn.addEventListener('click', () => {
       const values = btn.dataset.values.split(',');
       const input = fields[btn.dataset.field];
-      const next = values[(values.indexOf(input.value) + 1) % values.length];
-      input.value = next;
-      btn.dataset.value = next;
+      input.value = values[(values.indexOf(input.value) + 1) % values.length];
+      syncCycleBtn(btn);
     });
   }
+
+  // Most browsers keep a button :focus'd after a mouse click (not just
+  // keyboard :focus-visible), which kept .icon-hover-label expanded via
+  // :focus long after the mouse moved on to a different icon -- both
+  // labels open at once, wide enough to push the row past the panel's
+  // edge. One delegated listener covers all five icons (lang, sun path
+  // style/view, citrus, clear cache -- each one of these buttons lives
+  // directly under .config-icon-row) since by the time this fires the
+  // click has already updated whatever value it needed to (button-specific
+  // listeners run first, being closer to the actual target). A Tab-focused
+  // button still shows its label via :focus same as before -- this only
+  // clears focus after a click.
+  overlay.querySelector('.config-icon-row')?.addEventListener('click', (e) => {
+    e.target.closest('button')?.blur();
+  });
 
   const close = () => overlay.classList.add('hidden');
 
@@ -161,8 +172,7 @@ async function triggerFullRefresh() {
   // e.g. sun path style, which just needs a re-read of already-cached data).
   let openedStation = '';
 
-  const openOnTab = async (tab) => {
-    showTab(tab);
+  const open = async () => {
     overlay.classList.remove('hidden');
     try {
       const res = await fetch('/api/config');
@@ -178,7 +188,7 @@ async function triggerFullRefresh() {
     }
   };
 
-  openBtn.addEventListener('click', () => openOnTab('general'));
+  openBtn.addEventListener('click', open);
   closeBtn.addEventListener('click', close);
   cancelBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -237,8 +247,14 @@ async function triggerFullRefresh() {
 (() => {
   const btn = document.getElementById('cfg-citrus-toggle');
   if (!btn) return;
+  const label = document.getElementById('cfg-citrus-label');
   const STORAGE_KEY = 'citrusMode';
-  const setPressed = (on) => btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  // Hover label shows on/off -- what the state actually means, not the
+  // field name -- same rule as the sun path style/view cycle buttons.
+  const setPressed = (on) => {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (label) label.textContent = on ? I18N.citrus_on_label : I18N.citrus_off_label;
+  };
   setPressed(localStorage.getItem(STORAGE_KEY) === '1');
   btn.addEventListener('click', () => {
     const on = btn.getAttribute('aria-pressed') !== 'true';
