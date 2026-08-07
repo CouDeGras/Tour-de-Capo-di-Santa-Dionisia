@@ -30,10 +30,17 @@ def _render_page(request, template_name, active_page):
     # fields (see base.html) -- when off (the default), weather_mqtt.py
     # never computes or publishes an irrigation decision either (see its
     # own CITRUS_MODE), so there's nothing there to look at.
-    citrus_on = services.api_config_get().get("citrus_mode") == "on"
+    site_cfg = services.api_config_get()
+    citrus_on = site_cfg.get("citrus_mode") == "on"
+    # Only used for the initial hidden/visible class on the two chart-layout
+    # wrappers below (see weather.html/irrigation.html) -- both wrappers'
+    # DOM is always rendered either way, app.js/weather.js/irrigation.js
+    # toggle between them client-side from here on, no reload needed (unlike
+    # citrus_on above, which does gate what's actually in the DOM).
+    trinity_on = site_cfg.get("trinity_mode") == "on"
     response = render(request, template_name, {
         "lang": lang, "t": strings, "i18n_json": i18n_json, "active_page": active_page,
-        "citrus_on": citrus_on,
+        "citrus_on": citrus_on, "trinity_on": trinity_on,
     })
     return _no_store(response)
 

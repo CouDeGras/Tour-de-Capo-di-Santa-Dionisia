@@ -262,7 +262,7 @@ function drawRayGlyph(ctx, px, py, view, color, ringRadius, bgColor) {
 // view flips it consistently with the day-path curve, compass labels, etc.
 const WIND_BARB_MPS_PER_FEATHER = 5;
 
-function drawWindBarb(ctx, cx, cy, R, view, fg, bg, windMps, windDirDeg) {
+function drawWindBarb(ctx, cx, cy, ringR, view, fg, bg, windMps, windDirDeg) {
   // windDirDeg can be "VRB" (METAR's variable-direction report, a real
   // value real stations return -- see formatWindDir) or missing entirely;
   // neither has a compass direction to point the shaft at, so there's
@@ -276,7 +276,11 @@ function drawWindBarb(ctx, cx, cy, R, view, fg, bg, windMps, windDirDeg) {
   const [ux, uy] = azUnit(dir, view);
   const px = -uy, py = ux; // perpendicular unit vector, for the feather ticks
 
-  const shaftLen = R * 0.55;
+  // Sized off the smallest concentric elevation ring (ringR, the 60deg
+  // ring -- see drawSunPath) rather than the full horizon radius, and
+  // scaled to sit strictly inside it, so the barb always reads as smaller
+  // than every ring on the widget regardless of size or projection.
+  const shaftLen = ringR * 0.8;
   const bx = cx + ux * shaftLen, by = cy + uy * shaftLen; // barb tip ("from" direction)
   const rx = cx - ux * shaftLen, ry = cy - uy * shaftLen; // readout, opposite side of the zenith
 
@@ -290,12 +294,13 @@ function drawWindBarb(ctx, cx, cy, R, view, fg, bg, windMps, windDirDeg) {
   ctx.lineTo(bx, by);
   ctx.stroke();
 
-  // Feathers, walking from the barb tip inward toward the zenith.
+  // Feathers, walking from the barb tip inward toward the zenith. Same
+  // proportions relative to shaftLen as before it was rescaled to ringR.
   ctx.fillStyle = fg; // pennants (below) are filled, not just stroked
-  const step = R * 0.075;
-  const featherLen = R * 0.16;
-  const halfLen = R * 0.08;
-  const pennantLen = R * 0.13;
+  const step = shaftLen * 0.1364;
+  const featherLen = shaftLen * 0.2909;
+  const halfLen = shaftLen * 0.1455;
+  const pennantLen = shaftLen * 0.2364;
   const at = (dist) => ({ x: bx - ux * dist, y: by - uy * dist }); // dist measured from the barb tip
 
   let units = Math.round((windMps / WIND_BARB_MPS_PER_FEATHER) * 2) / 2; // nearest half-feather
@@ -513,7 +518,12 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
 
   // Wind barb, drawn last of all so its shaft reads clearly crossing right
   // through the zenith reticule above rather than being obscured by it.
-  drawWindBarb(ctx, cx, cy, R, view, fg, bg, windMps, windDirDeg);
+  // Sized off the smallest concentric ring (elev=60, always the smaller of
+  // the two drawn rings since elevToRadiusFraction is monotonically
+  // decreasing in elevation under either projection) so the barb stays
+  // visibly shorter than every ring on the widget.
+  const smallestRingR = R * elevToRadiusFraction(60, projection);
+  drawWindBarb(ctx, cx, cy, smallestRingR, view, fg, bg, windMps, windDirDeg);
 }
 
 // ── Render helpers ────────────────────────────────────────────────────────────
@@ -556,76 +566,9 @@ function renderMetrics(current, schedule) {
   document.getElementById('m-vpd').textContent        = cur.vpd_kpa != null ? rv(cur.vpd_kpa, 2) : '—';
 }
 
-// hLabel/dateMarks/AXIS_STEP/RAIN_MIN_MAX_MM/combinedAxis now live in
-// charts.js (loaded before this file -- see weather.html).
-
-// No eventMarks passed here -- this is the standalone weather page,
-// deliberately decoupled from irrigation scheduling.
-function renderRainCharts(rows) {
-  const labels       = rows.map(hLabel);
-  const epochs       = rows.map(r => r.epoch);
-  const historic     = rows.map(r => r.historic ?? false);
-  // Historic rows' rain fields are always null (no cached historic
-  // precipitation total, see dashboard/services.py's _historic_rows) --
-  // left as null rather than defaulted to 0 like a forecast gap would be,
-  // so the chart draws them as blank/padded, not a false "0mm observed".
-  const owmRain      = rows.map(r => r.historic ? null : (r.owm_rain_3h_mm ?? 0));
-  const yrRain       = rows.map(r => r.historic ? null : (r.yr_rain_3h_mm  ?? 0));
-  const omRain       = rows.map(r => r.historic ? null : (r.om_rain_3h_mm  ?? 0));
-  const yrInterp     = rows.map(r => r.yr_rain_interpolated ?? false);
-  const yrBlock      = rows.map(r => r.yr_rain_block ?? null);
-  const owmTemps     = rows.map(r => r.owm_temp_c);
-  const yrTemps      = rows.map(r => r.yr_temp_c);
-  const omTemps      = rows.map(r => r.om_temp_c);
-
-  const dm = dateMarks(rows);
-  // One axis per chart, not one shared across all three -- see
-  // combinedAxis's docstring for why that's fine despite the "same mm/°C
-  // per row everywhere" comparability still holding: each chart maxes out
-  // (or floors out, on a dry/flat one) at its own tallest prediction
-  // instead of all three being stretched to match whichever source has the
-  // biggest number.
-  const axisOwm = combinedAxis([owmRain], [owmTemps]);
-  const axisYr  = combinedAxis([yrRain],  [yrTemps]);
-  const axisOm  = combinedAxis([omRain],  [omTemps]);
-
-  // Width, unlike height, IS still shared across all three -- but fixed at
-  // colLayout's own max cell size (8px), not measured against the
-  // container the way colLayout normally would. Measuring created a
-  // feedback loop with .layout's max-content-sized right column
-  // (style.css): a freshly loaded page starts with placeholder-sized
-  // canvases (no chart has been drawn yet), so the very first measurement
-  // read a tiny width and produced a small chart -- exactly what changing
-  // the language surfaced, since saving a new language reloads the whole
-  // page. Worse, each subsequent 60s refresh re-measured against the
-  // PREVIOUS cycle's now-slightly-wider canvas, climbing toward the true
-  // max size over several visibly growing steps instead of landing on it
-  // immediately -- that's the "grows 3 times" toggling citrus mode seemed
-  // to trigger, though citrus itself never touches these charts; it just
-  // happened to be clicked while a couple of those 60s cycles landed.
-  // Fixed removes the feedback loop entirely: nCols (rows.length) is the
-  // only input, so the width is deterministic from the very first paint.
-  // A container too narrow for it falls back to .chart-scroll's own
-  // horizontal scroll (that's what it's there for) rather than ever being
-  // measured and shrunk to fit.
-  const chartLayout = (() => {
-    const ML = 36, CELL = 8, GAP = Math.max(1, Math.floor(CELL * 0.15));
-    return { ML, CELL, GAP, colW: CELL + GAP, cssW: ML + rows.length * (CELL + GAP) };
-  })();
-
-  drawGrid('chart-rain-owm', owmRain, {
-    labels, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
-    overlay: axisOwm.temp && { values: owmTemps, ...axisOwm.temp },
-  });
-  drawGrid('chart-rain-yr', yrRain, {
-    labels, ...axisYr.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic, layout: chartLayout,
-    overlay: axisYr.temp && { values: yrTemps, ...axisYr.temp },
-  });
-  drawGrid('chart-rain-om', omRain, {
-    labels, ...axisOm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
-    overlay: axisOm.temp && { values: omTemps, ...axisOm.temp },
-  });
-}
+// hLabel/dateMarks/AXIS_STEP/RAIN_MIN_MAX_MM/combinedAxis/renderRainCharts/
+// renderMeanChart/applyTrinityMode now live in charts.js (loaded before this
+// file -- see weather.html), shared with irrigation.js.
 
 // ── Main refresh ─────────────────────────────────────────────────────────────
 
@@ -646,7 +589,7 @@ async function refresh() {
     drawSunPath('chart-sun', (data.location || {}).lat, (data.location || {}).lon, data.sun_projection, data.sun_view, (current || {}).wind_mps, (current || {}).wind_dir_deg);
 
     renderMetrics(current, sched);
-    if (frows.length) renderRainCharts(frows);
+    applyTrinityMode(frows, data.trinity_mode !== 'off');
 
   } catch (err) {
     console.error('Error refreshing:', err);

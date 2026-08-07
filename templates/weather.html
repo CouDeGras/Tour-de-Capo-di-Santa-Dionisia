@@ -61,23 +61,39 @@
       </div>
 
       <div class="card col-charts">
-        <div class="stk-header">
-          {{ t.chart_owm }}
-          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
-        </div>
-        <div class="chart-scroll"><canvas id="chart-rain-owm"></canvas></div>
+        <!-- Trinity mode (see base.html's cfg-trinity-toggle): both layouts
+             always sit in the DOM, charts.js's applyTrinityMode toggles
+             which one's visible (and draws into it) client-side. The
+             initial hidden/visible split here is just so the right one
+             shows before the first JS render pass runs, not a gate on
+             which markup exists -- see dashboard/views.py's trinity_on. -->
+        <div class="trinity-sources{% if not trinity_on %} hidden{% endif %}">
+          <div class="stk-header">
+            {{ t.chart_owm }}
+            <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-owm"></canvas></div>
 
-        <div class="stk-header">
-          {{ t.chart_yr }}
-          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
-        </div>
-        <div class="chart-scroll"><canvas id="chart-rain-yr"></canvas></div>
+          <div class="stk-header">
+            {{ t.chart_yr }}
+            <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-yr"></canvas></div>
 
-        <div class="stk-header">
-          {{ t.chart_om }}
-          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+          <div class="stk-header">
+            {{ t.chart_om }}
+            <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-om"></canvas></div>
         </div>
-        <div class="chart-scroll"><canvas id="chart-rain-om"></canvas></div>
+
+        <div class="trinity-mean{% if trinity_on %} hidden{% endif %}">
+          <div class="stk-header">
+            {{ t.chart_mean }}
+            <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-mean"></canvas></div>
+        </div>
       </div>
 
     </div>

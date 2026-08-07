@@ -43,6 +43,7 @@ SITE_CONFIG = DATA_DIR / "site_config.json"
 SITE_CONFIG_FIELDS = (
     "station", "broker", "root_topic", "lang", "sun_projection", "sun_view",
     "mqtt_pub_password", "pump_flow_rate_lpm", "pump_target_volume_l", "citrus_mode",
+    "trinity_mode",
 )
 WEATHER_MQTT_SCRIPT = BASE_DIR / "weather_mqtt.py"
 REFRESH_TIMEOUT_SECONDS = 90
@@ -119,6 +120,16 @@ DEFAULT_PUMP_TARGET_VOLUME_L = 24.0
 # to look at there when nothing's being computed or published.
 CITRUS_MODES = ("on", "off")
 DEFAULT_CITRUS_MODE = "off"
+
+# Whether the weather/irrigation rain+temp charts show all three sources
+# (OWM/Yr.no/Open-Meteo) side by side or a single mean-of-sources chart --
+# see weather.js's/irrigation.js's renderRainCharts/renderMeanChart. Purely
+# a display preference (unlike citrus_mode above), so it needs no gating in
+# views.py: both pages already carry the DOM for both chart layouts and just
+# toggle which one's visible client-side. Defaults "on" (three sources) to
+# match the weather page's original always-on behavior.
+TRINITY_MODES = ("on", "off")
+DEFAULT_TRINITY_MODE = "on"
 
 
 def current_lang() -> str:
@@ -200,6 +211,7 @@ def api_status() -> dict:
     site_cfg = api_config_get()
     sun_projection = site_cfg.get("sun_projection", DEFAULT_SUN_PROJECTION)
     sun_view = site_cfg.get("sun_view", DEFAULT_SUN_VIEW)
+    trinity_mode = site_cfg.get("trinity_mode", DEFAULT_TRINITY_MODE)
 
     data = json.loads(WEATHER_CACHE.read_text(encoding="utf-8")) if WEATHER_CACHE.exists() else {}
     loc = data.setdefault("location", {})
@@ -232,6 +244,7 @@ def api_status() -> dict:
 
     data["sun_projection"] = sun_projection
     data["sun_view"] = sun_view
+    data["trinity_mode"] = trinity_mode
     return data
 
 
@@ -270,6 +283,7 @@ def api_config_get() -> dict:
         cfg["pump_flow_rate_lpm"] = DEFAULT_PUMP_FLOW_RATE_LPM
         cfg["pump_target_volume_l"] = DEFAULT_PUMP_TARGET_VOLUME_L
         cfg["citrus_mode"] = DEFAULT_CITRUS_MODE
+        cfg["trinity_mode"] = DEFAULT_TRINITY_MODE
         return cfg
     try:
         data = json.loads(SITE_CONFIG.read_text(encoding="utf-8"))
@@ -299,6 +313,8 @@ def api_config_get() -> dict:
         cfg["pump_target_volume_l"] = DEFAULT_PUMP_TARGET_VOLUME_L
     citrus_mode = str(cfg["citrus_mode"] or "").strip().lower()
     cfg["citrus_mode"] = citrus_mode if citrus_mode in CITRUS_MODES else DEFAULT_CITRUS_MODE
+    trinity_mode = str(cfg["trinity_mode"] or "").strip().lower()
+    cfg["trinity_mode"] = trinity_mode if trinity_mode in TRINITY_MODES else DEFAULT_TRINITY_MODE
     return cfg
 
 
@@ -368,6 +384,11 @@ def api_config_save(payload: dict) -> dict:
     if citrus_mode and citrus_mode not in CITRUS_MODES:
         raise ValueError(f"'citrus_mode' must be one of {', '.join(CITRUS_MODES)}.")
     cfg["citrus_mode"] = citrus_mode or DEFAULT_CITRUS_MODE
+
+    trinity_mode = str(payload.get("trinity_mode") or "").strip().lower()
+    if trinity_mode and trinity_mode not in TRINITY_MODES:
+        raise ValueError(f"'trinity_mode' must be one of {', '.join(TRINITY_MODES)}.")
+    cfg["trinity_mode"] = trinity_mode or DEFAULT_TRINITY_MODE
 
     tmp = SITE_CONFIG.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")

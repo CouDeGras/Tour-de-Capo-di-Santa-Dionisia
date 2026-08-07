@@ -111,7 +111,12 @@ function drawGrid(canvasId, values, opts) {
   ctx.fillStyle = fg;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  const yEvery = Math.max(1, Math.ceil(nRows / 7));
+  // Label every few grid rows -- spacing driven by how many rows fit the
+  // minimum pixel gap text needs, not stretched to hit some fixed total
+  // label count. That way a taller chart (more rows) gets proportionally
+  // more labels instead of the same handful spread thinner across it.
+  const MIN_Y_LABEL_GAP_PX = 10;
+  const yEvery = Math.max(1, Math.ceil(MIN_Y_LABEL_GAP_PX / rowH));
   for (let r = 0; r <= nRows; r += yEvery) {
     const val = opts.minY + r * opts.stepY;
     // Points at the row's bottom edge (an extension of the square's
@@ -294,9 +299,13 @@ function drawGrid(canvasId, values, opts) {
     ctx.font = '8px monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const OV_STEPS = 4;
-    for (let i = 0; i <= OV_STEPS; i++) {
-      const val = ov.minY + i * (ov.maxY - ov.minY) / OV_STEPS;
+    // Same grid-row cadence as the left mm axis (yEvery), not a fixed count
+    // of labels -- ov.minY/maxY span exactly nRows grid rows by construction
+    // (combinedAxis ties the temp range to the same row count as rain), so
+    // stepping by row index keeps both axes' labels aligned to the same
+    // horizontal gridlines.
+    for (let r = 0; r <= nRows; r += yEvery) {
+      const val = ov.minY + (r / nRows) * (ov.maxY - ov.minY);
       const y   = Math.round(toYOv(val)) + 0.5;
       ctx.strokeStyle = fg;
       ctx.lineWidth   = 1;
@@ -401,10 +410,10 @@ const RAIN_MIN_MAX_MM = 20; // floor for the rain axis top, so a dry spell doesn
 // Computes one rain+temp axis (row scale, span, centered temp range) from
 // whatever series lists it's given -- 1 row is always AXIS_STEP mm AND
 // AXIS_STEP °C, that ratio is a fixed constant, not derived from the data.
-// Called per-chart (see weather.js's renderRainCharts), each with just its
+// Called per-chart (see renderRainCharts below), each with just its
 // own single series: the row scale being fixed is exactly what makes each
 // chart free to size its own height independently -- OWM, Yr.no and
-// Open-Meteo (or irrigation.js's single mean-of-sources chart) can each max
+// Open-Meteo (or renderMeanChart's single mean-of-sources chart) can each max
 // out at their own tallest prediction (and fall back to RAIN_MIN_MAX_MM's
 // floor on a dry/flat one) without losing the "1mm/1°C is always this many
 // pixels, on every chart" comparability that mattered here, since that
@@ -442,4 +451,127 @@ function combinedAxis(rainSeriesList, tempSeriesList) {
     rain: { minY: 0, maxY: span, stepY: AXIS_STEP, decimals: 0, unit: 'mm' },
     temp,
   };
+}
+
+// ── Shared chart width, fixed at colLayout's own max cell size ─────────────
+// Not measured against the container -- see renderRainCharts's docstring
+// below for the feedback-loop it avoids. Shared by every caller here since
+// they all want the exact same deterministic-from-first-paint behavior.
+function fixedChartLayout(nCols) {
+  const ML = 36, CELL = 8, GAP = Math.max(1, Math.floor(CELL * 0.15));
+  return { ML, CELL, GAP, colW: CELL + GAP, cssW: ML + nCols * (CELL + GAP) };
+}
+
+// ── Three-per-source chart (OWM/Yr.no/Open-Meteo, one canvas each) ─────────
+// Shared by weather.html and irrigation.html -- both carry the same three
+// canvas ids (chart-rain-owm/-yr/-om), shown when trinity mode is on (see
+// applyTrinityMode below and dashboard/services.py's TRINITY_MODES).
+function renderRainCharts(rows) {
+  const labels       = rows.map(hLabel);
+  const epochs       = rows.map(r => r.epoch);
+  const historic     = rows.map(r => r.historic ?? false);
+  // Historic rows' rain fields are always null (no cached historic
+  // precipitation total, see dashboard/services.py's _historic_rows) --
+  // left as null rather than defaulted to 0 like a forecast gap would be,
+  // so the chart draws them as blank/padded, not a false "0mm observed".
+  const owmRain      = rows.map(r => r.historic ? null : (r.owm_rain_3h_mm ?? 0));
+  const yrRain       = rows.map(r => r.historic ? null : (r.yr_rain_3h_mm  ?? 0));
+  const omRain       = rows.map(r => r.historic ? null : (r.om_rain_3h_mm  ?? 0));
+  const yrInterp     = rows.map(r => r.yr_rain_interpolated ?? false);
+  const yrBlock      = rows.map(r => r.yr_rain_block ?? null);
+  const owmTemps     = rows.map(r => r.owm_temp_c);
+  const yrTemps      = rows.map(r => r.yr_temp_c);
+  const omTemps      = rows.map(r => r.om_temp_c);
+
+  const dm = dateMarks(rows);
+  // One axis per chart, not one shared across all three -- see
+  // combinedAxis's docstring for why that's fine despite the "same mm/°C
+  // per row everywhere" comparability still holding: each chart maxes out
+  // (or floors out, on a dry/flat one) at its own tallest prediction
+  // instead of all three being stretched to match whichever source has the
+  // biggest number.
+  const axisOwm = combinedAxis([owmRain], [owmTemps]);
+  const axisYr  = combinedAxis([yrRain],  [yrTemps]);
+  const axisOm  = combinedAxis([omRain],  [omTemps]);
+
+  // Width, unlike height, IS still shared across all three -- but fixed at
+  // colLayout's own max cell size (8px), not measured against the
+  // container the way colLayout normally would. Measuring created a
+  // feedback loop with .layout's max-content-sized right column
+  // (style.css): a freshly loaded page starts with placeholder-sized
+  // canvases (no chart has been drawn yet), so the very first measurement
+  // read a tiny width and produced a small chart -- exactly what changing
+  // the language surfaced, since saving a new language reloads the whole
+  // page. Worse, each subsequent 60s refresh re-measured against the
+  // PREVIOUS cycle's now-slightly-wider canvas, climbing toward the true
+  // max size over several visibly growing steps instead of landing on it
+  // immediately -- that's the "grows 3 times" toggling citrus mode seemed
+  // to trigger, though citrus itself never touches these charts; it just
+  // happened to be clicked while a couple of those 60s cycles landed.
+  // Fixed removes the feedback loop entirely: nCols (rows.length) is the
+  // only input, so the width is deterministic from the very first paint.
+  // A container too narrow for it falls back to .chart-scroll's own
+  // horizontal scroll (that's what it's there for) rather than ever being
+  // measured and shrunk to fit.
+  const chartLayout = fixedChartLayout(rows.length);
+
+  drawGrid('chart-rain-owm', owmRain, {
+    labels, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisOwm.temp && { values: owmTemps, ...axisOwm.temp },
+  });
+  drawGrid('chart-rain-yr', yrRain, {
+    labels, ...axisYr.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisYr.temp && { values: yrTemps, ...axisYr.temp },
+  });
+  drawGrid('chart-rain-om', omRain, {
+    labels, ...axisOm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    overlay: axisOm.temp && { values: omTemps, ...axisOm.temp },
+  });
+}
+
+// ── Mean-of-sources chart (one canvas, all three sources averaged) ─────────
+// Shared by weather.html and irrigation.html -- both carry a chart-rain-mean
+// canvas, shown when trinity mode is off (see applyTrinityMode below).
+function meanOf(values) {
+  const nums = values.filter(v => v != null);
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+
+function renderMeanChart(rows) {
+  const labels   = rows.map(hLabel);
+  const epochs   = rows.map(r => r.epoch);
+  const historic = rows.map(r => r.historic ?? false);
+  // Historic rows carry no rain total from any source (see renderRainCharts
+  // above) -- averaging three nulls would already come out null via
+  // meanOf, this just keeps that "blank/padded, not a false 0mm" intent
+  // explicit rather than incidental.
+  const rainMean = rows.map(r => r.historic ? null : meanOf([r.owm_rain_3h_mm, r.yr_rain_3h_mm, r.om_rain_3h_mm]));
+  const tempMean = rows.map(r => meanOf([r.owm_temp_c, r.yr_temp_c, r.om_temp_c]));
+
+  const dm = dateMarks(rows);
+  const axis = combinedAxis([rainMean], [tempMean]);
+  const layout = fixedChartLayout(rows.length);
+
+  drawGrid('chart-rain-mean', rainMean, {
+    labels, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout,
+    overlay: axis.temp && { values: tempMean, ...axis.temp },
+  });
+}
+
+// ── Trinity mode: show whichever chart layout is active and render it ──────
+// Both weather.html and irrigation.html carry both layouts' DOM at all
+// times (see their own .trinity-sources/.trinity-mean wrappers) -- this
+// just flips which one's visible and draws into it, so a mid-session
+// toggle (no page reload, see app.js's cfg-trinity-toggle) takes effect
+// immediately on the next status refresh. Silently no-ops on a page with
+// neither wrapper rather than erroring, so it's safe to call unconditionally
+// from every page's refresh() even before either wrapper exists in the DOM.
+function applyTrinityMode(rows, trinityOn) {
+  const sources = document.querySelector('.trinity-sources');
+  const mean    = document.querySelector('.trinity-mean');
+  if (sources) sources.classList.toggle('hidden', !trinityOn);
+  if (mean)    mean.classList.toggle('hidden', trinityOn);
+  if (!rows || !rows.length) return;
+  if (trinityOn) renderRainCharts(rows);
+  else renderMeanChart(rows);
 }

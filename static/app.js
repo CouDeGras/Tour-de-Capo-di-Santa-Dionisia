@@ -103,6 +103,7 @@ async function triggerFullRefresh() {
     pump_flow_rate_lpm: document.getElementById('cfg-pump-flow-rate'),
     pump_target_volume_l: document.getElementById('cfg-pump-target-volume'),
     citrus_mode: document.getElementById('cfg-citrus-mode'),
+    trinity_mode: document.getElementById('cfg-trinity-mode'),
   };
   for (const key of Object.keys(fields)) {
     if (!fields[key]) delete fields[key];
@@ -184,13 +185,32 @@ async function triggerFullRefresh() {
     syncCitrusBtn();
   });
 
+  // Trinity mode: same on/off toggle shape as citrus mode above, but purely
+  // a display preference -- see base.html's comment on cfg-trinity-toggle
+  // and weather.js's/irrigation.js's applyTrinityMode. Doesn't need the
+  // save-time reload citrus mode does; window.dashboardRefresh() below
+  // already re-reads /api/status (which carries trinity_mode) and
+  // re-renders whichever chart layout that calls for.
+  const trinityBtn = document.getElementById('cfg-trinity-toggle');
+  const trinityLabel = document.getElementById('cfg-trinity-label');
+  const syncTrinityBtn = () => {
+    if (!trinityBtn || !fields.trinity_mode) return;
+    const on = fields.trinity_mode.value === 'on';
+    trinityBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (trinityLabel) trinityLabel.textContent = on ? I18N.trinity_on_label : I18N.trinity_off_label;
+  };
+  trinityBtn?.addEventListener('click', () => {
+    fields.trinity_mode.value = fields.trinity_mode.value === 'on' ? 'off' : 'on';
+    syncTrinityBtn();
+  });
+
   // Most browsers keep a button :focus'd after a mouse click (not just
   // keyboard :focus-visible), which kept .icon-hover-label expanded via
   // :focus long after the mouse moved on to a different icon -- both
   // labels open at once, wide enough to push the row past the panel's
-  // edge. One delegated listener covers all five icons (lang, sun path
-  // style/view, citrus, clear cache -- each one of these buttons lives
-  // directly under .config-icon-row) since by the time this fires the
+  // edge. One delegated listener covers all six icons (lang, sun path
+  // style/view, citrus, trinity, clear cache -- each one of these buttons
+  // lives directly under .config-icon-row) since by the time this fires the
   // click has already updated whatever value it needed to (button-specific
   // listeners run first, being closer to the actual target). A Tab-focused
   // button still shows its label via :focus same as before -- this only
@@ -219,6 +239,7 @@ async function triggerFullRefresh() {
       setLangDisplay(fields.lang.value || 'en');
       for (const btn of cycleBtns) syncCycleBtn(btn);
       syncCitrusBtn();
+      syncTrinityBtn();
       openedStation = (cfg.station || '').trim().toUpperCase();
       openedCitrusMode = cfg.citrus_mode || '';
     } catch (err) {
