@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_VERSION="$(node "$HERE/build-version.js")"
 
-if [[ ! "$BUILD_VERSION" =~ ^[0-9]{2}\.[0-9]{3,4}\.[0-9]{4}$ ]]; then
+if [[ ! "$BUILD_VERSION" =~ ^[0-9]{2}\.(0?[1-9]|1[0-2])\.(0?[1-9]|[12][0-9]|3[01])$ ]]; then
   echo "Invalid generated build version: $BUILD_VERSION" >&2
   exit 1
 fi

@@ -21,8 +21,8 @@ if (-not $env:HTTP_PROXY) {
 }
 
 $BuildVersion = (& node.exe (Join-Path $PSScriptRoot "build-version.js")).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Unable to generate the timestamp build version." }
-if ($BuildVersion -notmatch '^\d{2}\.\d{3,4}\.\d{4}$') {
+if ($LASTEXITCODE -ne 0) { throw "Unable to generate the date build version." }
+if ($BuildVersion -notmatch '^\d{2}\.(0?[1-9]|1[0-2])\.(0?[1-9]|[12]\d|3[01])$') {
     throw "Invalid generated build version: $BuildVersion"
 }
 Write-Host "==> Building Windows installer version $BuildVersion"

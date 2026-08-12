@@ -19,14 +19,15 @@ This stages a clean backend snapshot plus the official Python 3.11 embeddable
 runtime, then produces:
 
 ```text
-electron/dist/capo-di-santa-dionisia-26.812.1231-setup.exe
+electron/dist/capo-di-santa-dionisia-26.8.12-setup.exe
 ```
 
 Both Windows and Linux builds generate their version automatically from the
-build machine's local date and time in `YY.MDD.HHmm` form (`M` is one or two
-digits). For example,
-12 August 2026 at 12:31 becomes `26.812.1231`. The generated version is passed
-to electron-builder at build time; `package.json` is not rewritten.
+build machine's local calendar date. GitHub releases can use the readable
+`vYY.MM.DD` form, such as `v26.08.12`. Electron receives the semver-compatible
+equivalent without leading zeroes, such as `26.8.12`, because semantic version
+numeric fields cannot begin with zero. The generated version is passed to
+electron-builder at build time; `package.json` is not rewritten.
 
 The installer offers an install-location chooser and creates Start Menu and
 desktop shortcuts. Runtime data is stored in Electron's per-user application
