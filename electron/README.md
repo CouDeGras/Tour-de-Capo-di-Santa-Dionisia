@@ -19,18 +19,38 @@ This stages a clean backend snapshot plus the official Python 3.11 embeddable
 runtime, then produces:
 
 ```text
-electron/dist/capo-di-santa-dionisia-1.0.0-setup.exe
+electron/dist/capo-di-santa-dionisia-26.812.1231-setup.exe
 ```
+
+Both Windows and Linux builds generate their version automatically from the
+build machine's local date and time in `YY.MDD.HHmm` form (`M` is one or two
+digits). For example,
+12 August 2026 at 12:31 becomes `26.812.1231`. The generated version is passed
+to electron-builder at build time; `package.json` is not rewritten.
 
 The installer offers an install-location chooser and creates Start Menu and
 desktop shortcuts. Runtime data is stored in Electron's per-user application
 data directory, normally `%APPDATA%\Capo di Santa Dionisia\`.
+
+The dashboard supports English, French, Italian, Spanish, Traditional Chinese,
+and Japanese. Space Grotesk/Space Mono remain the primary theme fonts for
+alphanumerics; bundled Noto Sans TC and Noto Sans JP supply only the missing
+CJK glyphs so regional text renders consistently without changing the Latin
+typography.
 
 Use `npm run stage:win` followed by `npm start` for Windows development mode.
 The staging command downloads its pinned Python runtime and installs the Python
 requirements, so it needs internet access when run. If npm has `proxy` or
 `https-proxy` configured, the Windows build wrapper also passes that setting to
 electron-builder's downloader.
+
+Windows dependency caching is persistent: after the first build,
+`build-backend-win.ps1` reuses the staged embedded-Python runtime without
+running pip or downloading wheels. Python archives, pip bootstrap files, and
+pip's wheel/HTTP cache live under `electron/.build-cache/windows/`. The runtime
+is rebuilt automatically only when `requirements.txt`, the pinned Python
+version, or the cache schema changes. Use
+`./build-backend-win.ps1 -RefreshRuntime` only when a manual refresh is needed.
 
 ## Linux AppImage build
 

@@ -7,9 +7,15 @@
 // script before either of those on any page that uses it.
 
 // Canvas does not inherit CSS fonts, so every chart label uses this exact
-// self-hosted Google Font instead of the platform-dependent `monospace`
-// generic (Consolas on Windows, commonly DejaVu Sans Mono on Linux).
-const CHART_FONT_FAMILY = '"Space Mono"';
+// self-hosted Google font instead of the platform-dependent `monospace`
+// generic (Consolas on Windows, commonly DejaVu Sans Mono on Linux). CJK
+// locales add their regional Noto Sans family as a glyph fallback while
+// keeping Latin/numeric chart metrics in Space Mono.
+const CHART_FONT_FAMILY = document.documentElement.lang === 'zh-Hant'
+  ? '"Space Mono", "Noto Sans TC"'
+  : document.documentElement.lang === 'ja'
+    ? '"Space Mono", "Noto Sans JP"'
+    : '"Space Mono"';
 let chartFontReadyPromise = null;
 
 function chartFont(sizePx) {
@@ -19,7 +25,12 @@ function chartFont(sizePx) {
 function ensureChartFontReady() {
   if (!document.fonts || !document.fonts.load) return Promise.resolve();
   if (!chartFontReadyPromise) {
-    chartFontReadyPromise = document.fonts.load(`10px ${CHART_FONT_FAMILY}`);
+    const sample = document.documentElement.lang === 'zh-Hant'
+      ? '0123456789氣溫雨量歷史日出日落'
+      : document.documentElement.lang === 'ja'
+        ? '0123456789気温雨量履歴日の出入り'
+        : '0123456789Mm°%';
+    chartFontReadyPromise = document.fonts.load(`10px ${CHART_FONT_FAMILY}`, sample);
   }
   return chartFontReadyPromise;
 }

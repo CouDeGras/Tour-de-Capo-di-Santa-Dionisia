@@ -18,3 +18,4 @@ data/*
 electron/node_modules/
 electron/resources/
 electron/dist/
+electron/.build-cache/

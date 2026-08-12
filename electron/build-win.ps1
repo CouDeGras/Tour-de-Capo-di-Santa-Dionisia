@@ -20,6 +20,13 @@ if (-not $env:HTTP_PROXY) {
     }
 }
 
+$BuildVersion = (& node.exe (Join-Path $PSScriptRoot "build-version.js")).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Unable to generate the timestamp build version." }
+if ($BuildVersion -notmatch '^\d{2}\.\d{3,4}\.\d{4}$') {
+    throw "Invalid generated build version: $BuildVersion"
+}
+Write-Host "==> Building Windows installer version $BuildVersion"
+
 & (Join-Path $PSScriptRoot "build-backend-win.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Windows backend staging failed with exit code $LASTEXITCODE" }
 
@@ -27,5 +34,5 @@ $Builder = Join-Path $PSScriptRoot "node_modules\.bin\electron-builder.cmd"
 if (-not (Test-Path -LiteralPath $Builder)) {
     throw "electron-builder is not installed. Run 'npm install' in electron/ first."
 }
-& $Builder --win nsis --x64
+& $Builder --win nsis --x64 "-c.extraMetadata.version=$BuildVersion"
 if ($LASTEXITCODE -ne 0) { throw "Windows packaging failed with exit code $LASTEXITCODE" }

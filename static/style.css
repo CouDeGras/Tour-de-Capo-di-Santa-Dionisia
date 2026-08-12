@@ -1,11 +1,27 @@
-/* Self-hosted so canvas text has identical metrics on Linux and Windows.
-   License: /static/fonts/OFL-Space-Mono.txt */
+/* Self-hosted Noto fonts keep CJK glyph forms and chart metrics identical on
+   Linux and Windows. Licenses live beside the font files under static/fonts. */
 @font-face {
   font-family: 'Space Mono';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
   src: url('/static/fonts/space-mono-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans TC';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/NotoSansTC-VF.otf') format('opentype');
+}
+
+@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/NotoSansJP-VF.otf') format('opentype');
 }
 
 /* ── Tokens: pure black / white only ── */
@@ -27,6 +43,11 @@ body {
   font-size: 16.8px;
   min-height: 100vh;
 }
+
+html[lang='zh-Hant'] body { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; }
+html[lang='ja'] body      { font-family: 'Space Grotesk', 'Noto Sans JP', sans-serif; }
+html[lang='zh-Hant'] #subtitle { font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif; }
+html[lang='ja'] #subtitle      { font-family: 'Space Grotesk', 'Noto Sans JP', sans-serif; }
 
 /* ── Header ── */
 header {

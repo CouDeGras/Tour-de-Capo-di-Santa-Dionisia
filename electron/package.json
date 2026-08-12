@@ -9,7 +9,7 @@
     "stage": "bash build-backend.sh",
     "stage:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File build-backend-win.ps1",
     "start": "electron .",
-    "build": "npm run stage && electron-builder --linux AppImage",
+    "build": "bash build-linux.sh",
     "build:linux": "npm run build",
     "build:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File build-win.ps1"
   },
@@ -24,7 +24,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "build/icon.png"
+      "build/icon.png",
+      "build/icon.ico"
     ],
     "extraResources": [
       { "from": "resources/app", "to": "app" },
@@ -42,7 +43,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "${name}-${version}-setup.${ext}"
     },
     "nsis": {

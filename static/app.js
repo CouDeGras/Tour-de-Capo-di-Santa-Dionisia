@@ -117,13 +117,16 @@ async function triggerFullRefresh() {
     fields.station.setSelectionRange(start, start);
   });
 
-  // Language: a globe button cycling en -> fr -> it -> en instead of a
+  // Language: a globe button cycling through every supported locale instead of a
   // dropdown. fields.lang (a hidden input, see base.html) still holds the
   // actual code and goes through the same load/save loop as every other
   // field in `fields` above -- only the visible label next to the button
   // needs its own sync, on open and on every cycle.
-  const LANGS = ['en', 'fr', 'it', 'es'];
-  const LANG_LABELS = { en: 'English', fr: 'Français', it: 'Italiano', es: 'Español' };
+  const LANGS = ['en', 'fr', 'it', 'es', 'zh-Hant', 'ja'];
+  const LANG_LABELS = {
+    en: 'English', fr: 'Français', it: 'Italiano', es: 'Español',
+    'zh-Hant': '繁體中文', ja: '日本語',
+  };
   const langBtn = document.getElementById('cfg-lang-btn');
   const langLabel = document.getElementById('cfg-lang-label');
   const setLangDisplay = (code) => { langLabel.textContent = LANG_LABELS[code] || code; };

@@ -111,7 +111,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# The dashboard itself is multilingual (en/fr/it, see dashboard/i18n.py) but
+# The dashboard itself is multilingual (see dashboard/i18n.py) but
 # that's an app-level concept driven by data/site_config.json, independent
 # of Django's own USE_I18N machinery.
 LANGUAGE_CODE = "en-us"

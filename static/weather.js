@@ -6,6 +6,7 @@
 // ── Local clock (station's timezone, from /api/status's location.tz) ──────────
 
 let stationTz = null;
+const UI_LOCALE = document.documentElement.lang || 'en';
 
 function tickLocalClock() {
   const timeEl = document.getElementById('local-time');
@@ -14,11 +15,11 @@ function tickLocalClock() {
   if (!stationTz) { timeEl.textContent = '—'; if (dateEl) dateEl.textContent = '—'; return; }
   const now = new Date();
   try {
-    timeEl.textContent = new Intl.DateTimeFormat('en-GB', {
+    timeEl.textContent = new Intl.DateTimeFormat(UI_LOCALE, {
       timeZone: stationTz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     }).format(now);
     if (dateEl) {
-      dateEl.textContent = new Intl.DateTimeFormat(undefined, {
+      dateEl.textContent = new Intl.DateTimeFormat(UI_LOCALE, {
         timeZone: stationTz, weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
       }).format(now);
     }

@@ -13,7 +13,7 @@
 
 <header>
   <div class="hdr-left">
-    <img src="/static/logo.svg" alt="Tour génoise de Capo di Santa Dionisia" class="hdr-logo">
+    <img src="/static/tower-mark.png" alt="" class="hdr-logo">
     <span id="subtitle">{{ t.subtitle }}</span>
   </div>
   <nav class="page-nav">
@@ -115,7 +115,7 @@
            danger zone, now reused between every icon instead (and hidden
            entirely while any one of them is expanded). -->
       <div class="config-icon-row">
-        <!-- No dropdown -- cfg-lang just holds the current code (en/fr/it),
+        <!-- No dropdown -- cfg-lang just holds the current locale code,
              cycled by the globe button; app.js's generic fields loop reads/
              writes its .value exactly like it would a <select>'s. -->
         <button id="cfg-lang-btn" class="icon-hover icon-btn" type="button" aria-label="{{ t.field_lang }}" title="{{ t.field_lang }}">
@@ -280,7 +280,7 @@
 </main>
 
 <footer>
-  <img src="/static/logo.svg" alt="Tour génoise de Capo di Santa Dionisia" class="footer-logo">
+  <img src="/static/tower-mark.png" alt="" class="footer-logo">
 </footer>
 
 <script>window.I18N = {{ i18n_json|safe }};</script>
