@@ -277,11 +277,32 @@ function drawWindBarb(ctx, cx, cy, ringR, view, fg, bg, windMps, windDirDeg) {
   const [ux, uy] = azUnit(dir, view);
   const px = -uy, py = ux; // perpendicular unit vector, for the feather ticks
 
-  // Sized off the smallest concentric elevation ring (ringR, the 60deg
-  // ring -- see drawSunPath) rather than the full horizon radius, and
-  // scaled to sit strictly inside it, so the barb always reads as smaller
-  // than every ring on the widget regardless of size or projection.
-  const shaftLen = ringR * 0.8;
+  // Feather/pennant ticks are fixed-size (off ringR, not the shaft), and
+  // deliberately smaller than the old shaftLen-scaled ones so a dense run of
+  // them (strong, gusty wind) doesn't read as a solid blob. What grows
+  // instead is the shaft itself: it starts short (baseShaftLen, enough for a
+  // single tick) and lengthens by one `step` per extra tick beyond the
+  // first, so ticks stay evenly spaced at their fixed size no matter how
+  // many stack up, rather than overlapping as they crowd a fixed-length
+  // shaft. Capped at maxShaftLen -- same 0.8*ringR the shaft always used --
+  // so it still sits strictly inside the smallest ring regardless of size or
+  // projection.
+  ctx.fillStyle = fg; // pennants (below) are filled, not just stroked
+  const maxShaftLen = ringR * 0.8;
+  const baseShaftLen = ringR * 0.45;
+  const step = ringR * 0.09;
+  const featherLen = ringR * 0.19;
+  const halfLen = ringR * 0.10;
+  const pennantLen = ringR * 0.15;
+
+  let units = Math.round((windMps / WIND_BARB_MPS_PER_FEATHER) * 2) / 2; // nearest half-feather
+  const pennants = Math.floor(units / 5);
+  const afterPennants = units - pennants * 5;
+  const feathers = Math.floor(afterPennants);
+  const half = (afterPennants - feathers) >= 0.5 ? 1 : 0;
+  const tickCount = pennants + feathers + half;
+  const shaftLen = Math.min(maxShaftLen, baseShaftLen + Math.max(0, tickCount - 1) * step);
+
   const bx = cx + ux * shaftLen, by = cy + uy * shaftLen; // barb tip ("from" direction)
   const rx = cx - ux * shaftLen, ry = cy - uy * shaftLen; // readout, opposite side of the zenith
 
@@ -295,16 +316,8 @@ function drawWindBarb(ctx, cx, cy, ringR, view, fg, bg, windMps, windDirDeg) {
   ctx.lineTo(bx, by);
   ctx.stroke();
 
-  // Feathers, walking from the barb tip inward toward the zenith. Same
-  // proportions relative to shaftLen as before it was rescaled to ringR.
-  ctx.fillStyle = fg; // pennants (below) are filled, not just stroked
-  const step = shaftLen * 0.1364;
-  const featherLen = shaftLen * 0.2909;
-  const halfLen = shaftLen * 0.1455;
-  const pennantLen = shaftLen * 0.2364;
+  // Feathers, walking from the barb tip inward toward the zenith.
   const at = (dist) => ({ x: bx - ux * dist, y: by - uy * dist }); // dist measured from the barb tip
-
-  let units = Math.round((windMps / WIND_BARB_MPS_PER_FEATHER) * 2) / 2; // nearest half-feather
   let d = 0;
   while (units >= 5) {
     const base = at(d), edge = at(d + step * 0.9);
@@ -519,11 +532,12 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
 
   // Wind barb, drawn last of all so its shaft reads clearly crossing right
   // through the zenith reticule above rather than being obscured by it.
-  // Sized off the smallest concentric ring (elev=60, always the smaller of
-  // the two drawn rings since elevToRadiusFraction is monotonically
-  // decreasing in elevation under either projection) so the barb stays
-  // visibly shorter than every ring on the widget.
-  const smallestRingR = R * elevToRadiusFraction(60, projection);
+  // Sized off the elev=60 ring's *linear* radius specifically, not whichever
+  // projection is actually active -- linear's radius at a given elevation is
+  // always <= orthographic's (1 - elevation/90 vs cos(elevation)), so this
+  // keeps the barb the same, smaller size in both modes rather than letting
+  // it swell under orthographic.
+  const smallestRingR = R * elevToRadiusFraction(60, 'linear');
   drawWindBarb(ctx, cx, cy, smallestRingR, view, fg, bg, windMps, windDirDeg);
 }
 
@@ -564,7 +578,7 @@ function renderMetrics(current, schedule) {
   document.getElementById('m-rh-sub').textContent     = `${rv(rhMin, 0)}% / ${rv(rhMax, 0)}%`;
   document.getElementById('m-wind').textContent       = cur.wind_mps != null ? `${rv(cur.wind_mps)} m/s` : '—';
   document.getElementById('m-wind-dir').textContent   = formatWindDir(cur.wind_dir_deg);
-  document.getElementById('m-vpd').textContent        = cur.vpd_kpa != null ? rv(cur.vpd_kpa, 2) : '—';
+  document.getElementById('m-pressure').textContent   = cur.pressure_hpa != null ? rv(cur.pressure_hpa, 0) : '—';
 }
 
 // hLabel/dateMarks/AXIS_STEP/RAIN_MIN_MAX_MM/combinedAxis/renderRainCharts/

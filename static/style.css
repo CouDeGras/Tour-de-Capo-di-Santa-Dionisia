@@ -90,11 +90,9 @@ header {
 }
 .icon-btn:hover { opacity: 0.6; }
 .icon-btn:disabled { cursor: default; opacity: 0.6; }
-.icon-btn.spinning svg { animation: icon-spin 0.8s linear infinite; }
 #quit-btn .icon-hover { display: none; }
 #quit-btn:hover .icon-default { display: none; }
 #quit-btn:hover .icon-hover { display: block; }
-@keyframes icon-spin { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
 
 /* ── Config modal ── */
 .config-overlay {
@@ -103,6 +101,21 @@ header {
   display: flex; align-items: center; justify-content: center;
   padding: 1.2rem;
   z-index: 100;
+}
+/* Reuses .config-overlay's fixed/dimmed backdrop -- see base.html's
+   refresh-overlay -- just a narrower, text-only panel instead of a form. No
+   click-outside/Escape dismissal while the refresh is in flight (see
+   app.js's refreshPopup): the close button itself stays hidden until the
+   request has settled, success or failure. */
+.refresh-panel {
+  width: 100%; max-width: 18rem;
+  background: var(--w); border: 1px solid var(--b);
+  padding: 1.8rem 1.5rem;
+  display: flex; flex-direction: column; align-items: center; gap: 1.1rem;
+  text-align: center;
+}
+.refresh-status-text {
+  font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
 }
 .config-panel {
   width: 100%; max-width: 26rem;
@@ -199,7 +212,7 @@ header {
 /* Same styling the removed .config-field-hint captions used to have --
    this line is what the setting is currently at (e.g. "Linear"), dimmer
    and smaller than the title above it. */
-.icon-hover-value { font-size: 0.72rem; font-weight: 500; opacity: 0.55; margin-top: 0.15rem; }
+.icon-hover-value { font-size: 0.72rem; font-weight: 300; opacity: 0.55; margin-top: 0.15rem; }
 
 /* ── Citrus mode toggle (cosmetic -- see app.js) ── */
 #cfg-citrus-toggle .icon-citrus-on { display: none; }
@@ -299,7 +312,7 @@ main { padding: 1.2rem 1.8rem; display: flex; flex-direction: column; gap: 0.9re
 
 /* Muted line under a card's headline value -- the local-time card's date,
    the location card's coordinates. */
-.card-subtext { font-size: 0.82rem; font-weight: 300; opacity: 0.7; margin-top: 0.3rem; }
+.card-subtext { font-size: 0.82rem; font-weight: 300; margin-top: 0.3rem; }
 
 /* Location card's city/station name -- same size as .reading-countdown's
    clock (which itself now matches .metric-card-lg .metric-value, see

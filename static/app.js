@@ -27,21 +27,25 @@ async function triggerFullRefresh() {
   if (refreshBusy) { refreshQueued = true; return; }
   refreshBusy = true;
   const btn = document.getElementById('refresh-btn');
-  if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+  if (btn) btn.disabled = true;
+  window.refreshPopup?.open();
+  let ok = true;
   try {
     do {
       refreshQueued = false;
       try {
         const res = await fetch('/api/refresh', { method: 'POST' });
-        if (!res.ok) console.error('Manual refresh failed:', await res.text());
+        if (!res.ok) { ok = false; console.error('Manual refresh failed:', await res.text()); }
       } catch (err) {
+        ok = false;
         console.error('Error triggering manual refresh:', err);
       }
       if (typeof window.dashboardRefresh === 'function') await window.dashboardRefresh();
     } while (refreshQueued);
   } finally {
     refreshBusy = false;
-    if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+    if (btn) btn.disabled = false;
+    window.refreshPopup?.settle(ok);
   }
 }
 
@@ -49,6 +53,35 @@ async function triggerFullRefresh() {
   const btn = document.getElementById('refresh-btn');
   if (!btn) return;
   btn.addEventListener('click', () => { triggerFullRefresh(); });
+})();
+
+// ── Refresh popup ────────────────────────────────────────────────────────
+// Up for the whole triggerFullRefresh round trip above, not just while a
+// fetch is in flight -- open() fires before the first request, settle()
+// only once the retry loop (refreshQueued) has actually finished. No close
+// button and no click-outside/Escape handler: the only way this hides is
+// its own timer in settle(), and that timer only ever starts once the
+// request has actually settled (success or failure) -- there's no way to
+// dismiss it, by accident or otherwise, while a refresh is still running.
+(() => {
+  const overlay = document.getElementById('refresh-overlay');
+  const statusText = document.getElementById('refresh-status-text');
+  if (!overlay || !statusText) return;
+
+  const AUTO_CLOSE_MS = 1500;
+  let closeTimer = null;
+
+  window.refreshPopup = {
+    open() {
+      clearTimeout(closeTimer);
+      statusText.textContent = I18N.refresh_updating;
+      overlay.classList.remove('hidden');
+    },
+    settle(ok) {
+      statusText.textContent = ok ? I18N.refresh_success : I18N.refresh_failed;
+      closeTimer = setTimeout(() => overlay.classList.add('hidden'), AUTO_CLOSE_MS);
+    },
+  };
 })();
 
 // ── Quit (AppImage/Electron shell only) ────────────────────────────────────

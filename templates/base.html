@@ -275,6 +275,17 @@
   </div>
 </div>
 
+<!-- Manual-refresh popup (see static/app.js's refreshPopup) -- shown for the
+     whole POST /api/refresh round trip so the header button's click isn't
+     silently swallowed. No close button and no click-outside/Escape
+     dismissal -- app.js hides it on its own timer, and only once the
+     request has actually settled (success or failure). -->
+<div id="refresh-overlay" class="config-overlay hidden">
+  <div class="refresh-panel">
+    <div id="refresh-status-text" class="refresh-status-text">{{ t.refresh_updating }}</div>
+  </div>
+</div>
+
 <main>
   {% block content %}{% endblock %}
 </main>
