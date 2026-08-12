@@ -199,7 +199,7 @@ header {
 /* Same styling the removed .config-field-hint captions used to have --
    this line is what the setting is currently at (e.g. "Linear"), dimmer
    and smaller than the title above it. */
-.icon-hover-value { font-size: 0.72rem; font-weight: 300; opacity: 0.55; margin-top: 0.15rem; }
+.icon-hover-value { font-size: 0.72rem; font-weight: 500; opacity: 0.55; margin-top: 0.15rem; }
 
 /* ── Citrus mode toggle (cosmetic -- see app.js) ── */
 #cfg-citrus-toggle .icon-citrus-on { display: none; }
