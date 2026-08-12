@@ -169,7 +169,7 @@ async function refresh() {
     renderCountdown(sched);
     renderDemand(ens);
     renderHistory(hist.rows || []);
-    applyTrinityMode(frows, data.trinity_mode !== 'off');
+    await applyTrinityMode(frows, data.trinity_mode !== 'off');
 
     lastAckDevices = acks.devices || {};
     renderPumpNodes(lastAckDevices);

@@ -6,6 +6,24 @@
 // clock, its own refresh()/setInterval) just to get drawGrid. Load this
 // script before either of those on any page that uses it.
 
+// Canvas does not inherit CSS fonts, so every chart label uses this exact
+// self-hosted Google Font instead of the platform-dependent `monospace`
+// generic (Consolas on Windows, commonly DejaVu Sans Mono on Linux).
+const CHART_FONT_FAMILY = '"Space Mono"';
+let chartFontReadyPromise = null;
+
+function chartFont(sizePx) {
+  return `${sizePx}px ${CHART_FONT_FAMILY}`;
+}
+
+function ensureChartFontReady() {
+  if (!document.fonts || !document.fonts.load) return Promise.resolve();
+  if (!chartFontReadyPromise) {
+    chartFontReadyPromise = document.fonts.load(`10px ${CHART_FONT_FAMILY}`);
+  }
+  return chartFontReadyPromise;
+}
+
 // ── Shared color helper (reads CSS vars so dark/light mode works) ─────────────
 
 function getColors() {
@@ -107,7 +125,7 @@ function drawGrid(canvasId, values, opts) {
   ctx.fillRect(0, 0, canvasW, cssH);
 
   // Y labels + ticks
-  ctx.font = '8px monospace';
+  ctx.font = chartFont(8);
   ctx.fillStyle = fg;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
@@ -234,7 +252,7 @@ function drawGrid(canvasId, values, opts) {
   // natural positions would collide -- e.g. a day boundary falling right on
   // top of a late-night irrigation event -- instead of letting them overlap.
   if (labelCandidates.length) {
-    ctx.font = '8px monospace';
+    ctx.font = chartFont(8);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const GAP_PX = 3;
@@ -254,7 +272,7 @@ function drawGrid(canvasId, values, opts) {
   }
 
   if (!opts.hideXLabels) {
-    ctx.font         = '8px monospace';
+    ctx.font         = chartFont(8);
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
 
@@ -296,7 +314,7 @@ function drawGrid(canvasId, values, opts) {
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(axisX, MT); ctx.lineTo(axisX, MT + cH); ctx.stroke();
 
-    ctx.font = '8px monospace';
+    ctx.font = chartFont(8);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     // Same grid-row cadence as the left mm axis (yEvery), not a fixed count
@@ -566,12 +584,13 @@ function renderMeanChart(rows) {
 // immediately on the next status refresh. Silently no-ops on a page with
 // neither wrapper rather than erroring, so it's safe to call unconditionally
 // from every page's refresh() even before either wrapper exists in the DOM.
-function applyTrinityMode(rows, trinityOn) {
+async function applyTrinityMode(rows, trinityOn) {
   const sources = document.querySelector('.trinity-sources');
   const mean    = document.querySelector('.trinity-mean');
   if (sources) sources.classList.toggle('hidden', !trinityOn);
   if (mean)    mean.classList.toggle('hidden', trinityOn);
   if (!rows || !rows.length) return;
+  await ensureChartFontReady();
   if (trinityOn) renderRainCharts(rows);
   else renderMeanChart(rows);
 }

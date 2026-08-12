@@ -34,7 +34,12 @@ const DASHBOARD_URL = `http://${DASHBOARD_HOST}:${DASHBOARD_PORT}/`;
 // with build-backend.sh -- same layout either way.
 const RESOURCES_DIR = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'resources');
 const PROJECT_DIR = path.join(RESOURCES_DIR, 'app');
-const VENV_PYTHON = path.join(RESOURCES_DIR, 'venv', 'bin', 'python3');
+// Linux staging creates a conventional venv; Windows staging uses the
+// official embeddable Python distribution so an installed app does not
+// depend on Python (or this build machine's Python) being present.
+const VENV_PYTHON = process.platform === 'win32'
+  ? path.join(RESOURCES_DIR, 'venv', 'python.exe')
+  : path.join(RESOURCES_DIR, 'venv', 'bin', 'python3');
 
 let mainWindow = null;
 let tray = null;
@@ -51,6 +56,9 @@ function runPython(args, { waitForExit = false } = {}) {
   const child = spawn(VENV_PYTHON, args, {
     cwd: PROJECT_DIR,
     env: { ...process.env, CAPO_DI_SANTA_DIONISIA_DATA_DIR: appDataDir() },
+    // Prevent bundled Python processes from opening console windows behind
+    // the Electron UI on Windows. This is ignored on other platforms.
+    windowsHide: true,
   });
   child.stdout.on('data', (d) => process.stdout.write(`[${args[0]}] ${d}`));
   child.stderr.on('data', (d) => process.stderr.write(`[${args[0]}] ${d}`));

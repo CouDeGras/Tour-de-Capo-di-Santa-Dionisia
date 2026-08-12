@@ -1,3 +1,13 @@
+/* Self-hosted so canvas text has identical metrics on Linux and Windows.
+   License: /static/fonts/OFL-Space-Mono.txt */
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/space-mono-latin-400.woff2') format('woff2');
+}
+
 /* ── Tokens: pure black / white only ── */
 :root { --b: #fff; --w: #000; --irrig: #b5caa0; --hist: #888; }
 

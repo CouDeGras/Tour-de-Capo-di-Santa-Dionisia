@@ -335,7 +335,7 @@ function drawWindBarb(ctx, cx, cy, ringR, view, fg, bg, windMps, windDirDeg) {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '9px monospace';
+  ctx.font = chartFont(9);
   haloText(ctx, `${windMps.toFixed(1)} m/s`, rx, ry - 5, fg, bg);
   haloText(ctx, `${Math.round(dir)}°`, rx, ry + 5, fg, bg);
 }
@@ -388,7 +388,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
     ctx.arc(cx, cy, R * elevToRadiusFraction(elev, projection), 0, 2 * Math.PI);
     ctx.stroke();
     const [lx, ly] = toXY(elev, 45);
-    labels.push({ text: elev + '°', x: lx, y: ly, font: '9px monospace' });
+    labels.push({ text: elev + '°', x: lx, y: ly, font: chartFont(9) });
   }
   ctx.setLineDash([]);
 
@@ -397,7 +397,7 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
   // fixed N/S/E/W text.
   for (const [text, az] of [['N', 0], ['S', 180], ['E', 90], ['W', 270]]) {
     const [ux, uy] = azUnit(az, view);
-    labels.push({ text, x: cx + ux * (R + 7), y: cy + uy * (R + 7), font: '10px monospace' });
+    labels.push({ text, x: cx + ux * (R + 7), y: cy + uy * (R + 7), font: chartFont(10) });
   }
 
   const now = new Date();
@@ -453,8 +453,8 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
     ctx.stroke();
     const lx = cx + ux * (R + 12), ly = cy + uy * (R + 12);
     const timeStr = hourAngleToLocalClock(rawHa, lonDeg, eqtime, now, stationTz);
-    labels.push({ text: Math.round(azDeg) + '°', x: lx, y: ly - (timeStr ? 5 : 0), font: '9px monospace' });
-    if (timeStr) labels.push({ text: timeStr, x: lx, y: ly + 5, font: '9px monospace' });
+    labels.push({ text: Math.round(azDeg) + '°', x: lx, y: ly - (timeStr ? 5 : 0), font: chartFont(9) });
+    if (timeStr) labels.push({ text: timeStr, x: lx, y: ly + 5, font: chartFont(9) });
   }
 
   // Current sun position -- only when actually above the horizon, same
@@ -492,8 +492,8 @@ function drawSunPath(canvasId, latDeg, lonDeg, projection, view, windMps, windDi
     // glyph-less. haloText already halos each line's own measured width
     // independently, which reads better here anyway (az. is usually the
     // wider line, alt. would otherwise sit inside an oversized shared halo).
-    labels.push({ text: `alt. ${Math.round(nowPos.elevation)}°`, x: lx, y: ly - 5, font: '9px monospace' });
-    labels.push({ text: `az. ${Math.round(nowPos.az)}°`, x: lx, y: ly + 5, font: '9px monospace' });
+    labels.push({ text: `alt. ${Math.round(nowPos.elevation)}°`, x: lx, y: ly - 5, font: chartFont(9) });
+    labels.push({ text: `az. ${Math.round(nowPos.az)}°`, x: lx, y: ly + 5, font: chartFont(9) });
   }
 
   // All labels last, on top of every stroke -- drawn in the order added
@@ -586,10 +586,11 @@ async function refresh() {
     const current = data.current    || null;
     const frows   = (data.comparison || {}).rows || [];
 
+    await ensureChartFontReady();
     drawSunPath('chart-sun', (data.location || {}).lat, (data.location || {}).lon, data.sun_projection, data.sun_view, (current || {}).wind_mps, (current || {}).wind_dir_deg);
 
     renderMetrics(current, sched);
-    applyTrinityMode(frows, data.trinity_mode !== 'off');
+    await applyTrinityMode(frows, data.trinity_mode !== 'off');
 
   } catch (err) {
     console.error('Error refreshing:', err);

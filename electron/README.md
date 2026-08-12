@@ -1,4 +1,38 @@
-# Capo di Santa Dionisia — AppImage build
+# Capo di Santa Dionisia — Electron builds
+
+The Electron shell supports both the original Linux AppImage and a native
+64-bit Windows installer. Each package includes its own Python runtime and
+backend dependencies, so target machines do not need Python, Django, or Node
+installed.
+
+## Windows build
+
+From PowerShell on a 64-bit Windows machine:
+
+```powershell
+cd electron
+npm install
+npm run build:win
+```
+
+This stages a clean backend snapshot plus the official Python 3.11 embeddable
+runtime, then produces:
+
+```text
+electron/dist/capo-di-santa-dionisia-1.0.0-setup.exe
+```
+
+The installer offers an install-location chooser and creates Start Menu and
+desktop shortcuts. Runtime data is stored in Electron's per-user application
+data directory, normally `%APPDATA%\Capo di Santa Dionisia\`.
+
+Use `npm run stage:win` followed by `npm start` for Windows development mode.
+The staging command downloads its pinned Python runtime and installs the Python
+requirements, so it needs internet access when run. If npm has `proxy` or
+`https-proxy` configured, the Windows build wrapper also passes that setting to
+electron-builder's downloader.
+
+## Linux AppImage build
 
 Packages the Django dashboard + `weather_mqtt.py --service` (the same code
 the `saignes-dashboard.service`/`saignes-weather.service` systemd units run)
@@ -8,7 +42,7 @@ standalone — no separate always-on service needed elsewhere. The existing
 systemd deployment is untouched by any of this; this is an additional
 packaging target, not a replacement.
 
-## Build
+### Build
 
 ```sh
 cd electron
@@ -33,7 +67,7 @@ resolves to on the *build* machine — build on a reasonably old/compatible
 base (e.g. Ubuntu 20.04/22.04) if you want the AppImage to run on a wide
 range of target distros, and spot-check on a couple before distributing.
 
-## Run
+### Run
 
 ```sh
 chmod +x capo-di-santa-dionisia-*.AppImage
@@ -64,7 +98,7 @@ commands on its own schedule and should keep running whether or not the
 window is open. Use the tray icon's "Quit" to actually stop both backend
 processes.
 
-## Dev mode (without packaging)
+### Dev mode (without packaging)
 
 ```sh
 cd electron
@@ -76,4 +110,4 @@ npm start                # electron . -- reads from ./resources/ directly
 ## Not yet done
 - Auto-launch on login (would need a `.desktop` file in
   `~/.config/autostart/` — not wired up by this build).
-- Windows/Mac packaging — out of scope, Linux AppImage only.
+- macOS packaging.

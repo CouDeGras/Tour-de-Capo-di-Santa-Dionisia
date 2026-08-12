@@ -2,13 +2,16 @@
   "name": "capo-di-santa-dionisia",
   "productName": "Capo di Santa Dionisia",
   "version": "1.0.0",
-  "description": "Irrigation dashboard and weather/MQTT service, bundled as a self-contained Linux AppImage.",
+  "description": "Irrigation dashboard and weather/MQTT service, bundled as a self-contained desktop app.",
   "private": true,
   "main": "main.js",
   "scripts": {
     "stage": "bash build-backend.sh",
+    "stage:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File build-backend-win.ps1",
     "start": "electron .",
-    "build": "npm run stage && electron-builder --linux AppImage"
+    "build": "npm run stage && electron-builder --linux AppImage",
+    "build:linux": "npm run build",
+    "build:win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File build-win.ps1"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -31,6 +34,22 @@
       "target": "AppImage",
       "icon": "build/icon.png",
       "category": "Utility"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${name}-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "afterPack": "afterPack.js"
   }
