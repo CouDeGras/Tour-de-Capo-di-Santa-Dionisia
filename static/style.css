@@ -388,6 +388,22 @@ main { padding: 1.2rem 1.8rem; display: flex; flex-direction: column; gap: 0.9re
 
 canvas { display: block; image-rendering: pixelated; }
 
+.chart-hover-readout {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  min-width: 5.5rem;
+  padding: 0.42rem 0.58rem;
+  background: #000;
+  color: #fff;
+  border: 1px solid #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
 /* Sun path widget's canvas is narrower than the card on wide layouts (it's
    a fixed square, unlike the scrolling rain charts) -- center it rather
    than leaving it flush against the card's left edge. */

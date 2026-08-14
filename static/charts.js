@@ -82,6 +82,83 @@ function colLayout(parentElem, nCols) {
   return { ML, CELL, GAP, colW, cssW: ML + nCols * colW };
 }
 
+// ── Shared per-column hover readout ─────────────────────────────────────────
+// One fixed-position element is reused by every rain/temperature canvas. The
+// data attached to a canvas is refreshed every time that canvas is redrawn, so
+// the minute refresh and Trinity-layout changes cannot leave stale readings.
+let chartHoverReadout = null;
+
+function getChartHoverReadout() {
+  if (!chartHoverReadout) {
+    chartHoverReadout = document.createElement('div');
+    chartHoverReadout.className = 'chart-hover-readout';
+    chartHoverReadout.hidden = true;
+    chartHoverReadout.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(chartHoverReadout);
+  }
+  return chartHoverReadout;
+}
+
+function hoverNumber(value) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  const rounded = Math.round(Number(value) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+// localTime is "MM-DD HH:MM". Each comparison column is a three-hour
+// bucket, displayed as an inclusive hour range: 13:00 through 15:59 ->
+// "13-15h", matching the grid's 3-hour rainfall total.
+function hoverPeriod(localTime) {
+  const match = /^(\d{2})-(\d{2})\s+(\d{1,2}):/.exec(localTime || '');
+  if (!match) return localTime || '—';
+  const startHour = Number(match[3]);
+  const endHour = (startHour + 2) % 24;
+  const pad = n => String(n).padStart(2, '0');
+  return `${match[1]}/${match[2]} ${pad(startHour)}-${pad(endHour)}h`;
+}
+
+function hideChartHoverReadout() {
+  if (chartHoverReadout) chartHoverReadout.hidden = true;
+}
+
+function positionChartHoverReadout(readout, event) {
+  const offset = 12;
+  const edge = 8;
+  readout.hidden = false;
+  // Measure after revealing, then keep the box within the viewport. It stays
+  // to the cursor's right except when the right edge has no room left.
+  const left = Math.min(event.clientX + offset, window.innerWidth - readout.offsetWidth - edge);
+  const top = Math.min(event.clientY + offset, window.innerHeight - readout.offsetHeight - edge);
+  readout.style.left = `${Math.max(edge, left)}px`;
+  readout.style.top = `${Math.max(edge, top)}px`;
+}
+
+function bindGridHover(canvas, data) {
+  canvas._gridHoverData = data;
+  if (canvas.dataset.gridHoverBound === 'true') return;
+  canvas.dataset.gridHoverBound = 'true';
+
+  canvas.addEventListener('mousemove', event => {
+    const current = canvas._gridHoverData;
+    const rect = canvas.getBoundingClientRect();
+    if (!current || !rect.width) return hideChartHoverReadout();
+
+    const x = (event.clientX - rect.left) * (current.canvasW / rect.width);
+    const gridRight = current.ML + current.nCols * current.colW;
+    if (x < current.ML || x >= gridRight) return hideChartHoverReadout();
+
+    const col = Math.floor((x - current.ML) / current.colW);
+    const readout = getChartHoverReadout();
+    readout.replaceChildren(
+      Object.assign(document.createElement('div'), { textContent: hoverPeriod(current.localTimes[col]) }),
+      Object.assign(document.createElement('div'), { textContent: `${hoverNumber(current.temperatures[col])}°` }),
+      Object.assign(document.createElement('div'), { textContent: `${hoverNumber(current.rain[col])}mm` }),
+    );
+    positionChartHoverReadout(readout, event);
+  });
+  canvas.addEventListener('mouseleave', hideChartHoverReadout);
+}
+
 // ── Grid chart (precipitation, single series) ─────────────────────────────────
 //
 // GitHub-contribution style: filled black cell = value; outlined white = empty.
@@ -405,6 +482,13 @@ function drawGrid(canvasId, values, opts) {
       ctx.stroke();
     }
   }
+
+  bindGridHover(canvas, {
+    ML, colW, nCols, canvasW,
+    localTimes: opts.localTimes || [],
+    temperatures: opts.overlay ? opts.overlay.values : [],
+    rain: values,
+  });
 }
 
 function hLabel(row) {
@@ -497,6 +581,7 @@ function fixedChartLayout(nCols) {
 // applyTrinityMode below and dashboard/services.py's TRINITY_MODES).
 function renderRainCharts(rows) {
   const labels       = rows.map(hLabel);
+  const localTimes   = rows.map(r => r.local_time);
   const epochs       = rows.map(r => r.epoch);
   const historic     = rows.map(r => r.historic ?? false);
   // Historic rows' rain fields are always null (no cached historic
@@ -545,15 +630,15 @@ function renderRainCharts(rows) {
   const chartLayout = fixedChartLayout(rows.length);
 
   drawGrid('chart-rain-owm', owmRain, {
-    labels, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    labels, localTimes, ...axisOwm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
     overlay: axisOwm.temp && { values: owmTemps, ...axisOwm.temp },
   });
   drawGrid('chart-rain-yr', yrRain, {
-    labels, ...axisYr.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic, layout: chartLayout,
+    labels, localTimes, ...axisYr.rain, hideXLabels: false, interpolated: yrInterp, block: yrBlock, dateMarks: dm, epochs, historic, layout: chartLayout,
     overlay: axisYr.temp && { values: yrTemps, ...axisYr.temp },
   });
   drawGrid('chart-rain-om', omRain, {
-    labels, ...axisOm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
+    labels, localTimes, ...axisOm.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout: chartLayout,
     overlay: axisOm.temp && { values: omTemps, ...axisOm.temp },
   });
 }
@@ -568,6 +653,7 @@ function meanOf(values) {
 
 function renderMeanChart(rows) {
   const labels   = rows.map(hLabel);
+  const localTimes = rows.map(r => r.local_time);
   const epochs   = rows.map(r => r.epoch);
   const historic = rows.map(r => r.historic ?? false);
   // Historic rows carry no rain total from any source (see renderRainCharts
@@ -582,7 +668,7 @@ function renderMeanChart(rows) {
   const layout = fixedChartLayout(rows.length);
 
   drawGrid('chart-rain-mean', rainMean, {
-    labels, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout,
+    labels, localTimes, ...axis.rain, hideXLabels: false, dateMarks: dm, epochs, historic, layout,
     overlay: axis.temp && { values: tempMean, ...axis.temp },
   });
 }

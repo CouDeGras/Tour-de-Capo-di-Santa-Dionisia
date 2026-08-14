@@ -30,8 +30,11 @@ numeric fields cannot begin with zero. The generated version is passed to
 electron-builder at build time; `package.json` is not rewritten.
 
 The installer offers an install-location chooser and creates Start Menu and
-desktop shortcuts. Runtime data is stored in Electron's per-user application
-data directory, normally `%APPDATA%\Capo di Santa Dionisia\`.
+desktop shortcuts. Its progress page labels the archive extraction/install
+passes explicitly, then reports the final registration/shortcut phase, so a
+normal progress-bar restart does not look like the installation started over.
+Runtime data is stored in Electron's per-user application data directory,
+normally `%APPDATA%\Capo di Santa Dionisia\`.
 
 The dashboard supports English, French, Italian, Spanish, Traditional Chinese,
 and Japanese. Space Grotesk/Space Mono remain the primary theme fonts for
