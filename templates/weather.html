@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t.title_weather }}{% endblock %}
+
+{% block content %}
+
+  <div class="layout">
+
+    <!-- Left column: sun path and daily solar phases. -->
+    <div class="col-left">
+
+
+      <div class="card">
+        <div class="card-label">{{ t.card_sun_path }}</div>
+        <div id="solar-summary" class="solar-summary" aria-live="polite">
+          <div class="solar-duration"><span>{{ t.solar_day_length }}</span> <strong id="solar-duration">—</strong></div>
+          <div id="solar-date" class="card-subtext"></div>
+          <div id="solar-stages" class="solar-stages"></div>
+          <div class="solar-diagrams">
+            <svg class="solar-twilight-backbone" viewBox="-48 -48 296 296" role="group" aria-label="{{ t.solar_clock_title }}" focusable="false">
+              <defs>
+                <pattern id="twilight-civil" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)">
+                  <path d="M0 0 V12" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" />
+                </pattern>
+                <pattern id="twilight-nautical" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+                  <path d="M0 0 V8" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" />
+                </pattern>
+                <pattern id="twilight-astronomical" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+                  <path d="M0 0 V5" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" />
+                </pattern>
+                <pattern id="twilight-night" patternUnits="userSpaceOnUse" width="5" height="5">
+                  <circle cx="2.5" cy="2.5" r="0.6" fill="currentColor" />
+                </pattern>
+              </defs>
+              <g id="solar-clock-bands"></g>
+              <g fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none">
+                <circle cx="100" cy="100" r="94" vector-effect="non-scaling-stroke" />
+                <path id="solar-clock-boundaries" d="M6 100 H194" vector-effect="non-scaling-stroke" />
+              </g>
+              <g class="solar-clock-readouts" pointer-events="none" text-anchor="middle">
+                <text x="100" y="40" class="solar-clock-label">{{ t.solar_altitude }}</text>
+                <text id="solar-clock-altitude" x="100" y="61" class="solar-clock-value">—</text>
+                <text x="100" y="141" class="solar-clock-label">{{ t.solar_azimuth }}</text>
+                <text id="solar-clock-azimuth" x="100" y="162" class="solar-clock-value">—</text>
+              </g>
+              <g class="solar-clock-labels" pointer-events="none">
+                <text x="100" y="96" text-anchor="middle" class="solar-clock-label">{{ t.solar_horizon }}</text>
+                <text id="solar-clock-rise-label" x="194" y="82" text-anchor="end" class="solar-clock-label">{{ t.anchor_sunrise }}</text>
+                <text id="solar-clock-set-label" x="6" y="82" text-anchor="start" class="solar-clock-label">{{ t.anchor_sunset }}</text>
+                <g id="solar-clock-degree-labels"></g>
+              </g>
+              <g id="solar-clock-sun" visibility="hidden" pointer-events="none">
+                <g id="solar-clock-sun-symbol">
+                  <circle class="solar-clock-ring" fill="var(--w)" stroke="currentColor" vector-effect="non-scaling-stroke" />
+                  <circle class="solar-clock-dot" fill="currentColor" />
+                  <path class="solar-clock-cross" stroke="currentColor" vector-effect="non-scaling-stroke" />
+                </g>
+              </g>
+            </svg>
+            <div class="solar-polar-panel">
+              <div class="solar-polar-readout solar-corner-top-left"><span class="solar-readout-name">{{ t.anchor_sunrise }}</span><span id="sun-rise-time">—</span><span id="sun-rise-az">—</span></div>
+              <div class="solar-polar-readout solar-corner-top-right"><span class="solar-readout-name">{{ t.anchor_sunset }}</span><span id="sun-set-time">—</span><span id="sun-set-az">—</span></div>
+              <div class="solar-polar-readout solar-corner-bottom-left"><span id="sun-position-alt">{{ t.solar_altitude }} —</span><span id="sun-position-az">{{ t.solar_azimuth }} —</span></div>
+              <div class="solar-polar-readout solar-corner-bottom-right"><span class="solar-readout-name">{{ t.metric_wind }}</span><span id="sun-wind-speed">—</span><span id="sun-wind-dir">—</span></div>
+              <canvas id="chart-sun"></canvas>
+            </div>
+          </div>
+          <div id="solar-message" class="card-subtext">{{ t.loading }}</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right column: local time and location, weather metrics, then source charts. -->
+    <div class="col-right">
+
+      <div class="grid g-2">
+        <div class="card">
+          <div class="card-label">{{ t.card_local_time }}</div>
+          <div id="local-time" class="reading-countdown">—</div>
+          <div id="local-date" class="card-subtext">—</div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">{{ t.card_location }}</div>
+          <div id="loc-name" class="loc-name">—</div>
+          <div id="loc-coords" class="card-subtext">—</div>
+        </div>
+      </div>
+
+      <!-- All four raw airport metrics, one row, same large size. -->
+      <div class="grid g-4">
+        <div class="card metric-card metric-card-lg">
+          <div class="card-label">{{ t.metric_temp }}</div>
+          <div id="m-temp" class="metric-value">—</div>
+          <div id="m-temp-range" class="metric-sub">—</div>
+        </div>
+        <div class="card metric-card metric-card-lg">
+          <div class="card-label">{{ t.metric_rh }}</div>
+          <div id="m-rh" class="metric-value">—</div>
+          <div id="m-rh-sub" class="metric-sub">—</div>
+        </div>
+        <div class="card metric-card metric-card-lg">
+          <div class="card-label">{{ t.metric_wind }}</div>
+          <div id="m-wind" class="metric-value">—</div>
+          <div id="m-wind-dir" class="metric-sub">—</div>
+        </div>
+        <div class="card metric-card metric-card-lg">
+          <div class="card-label">{{ t.metric_pressure }}</div>
+          <div id="m-pressure" class="metric-value">—</div>
+          <div class="metric-sub">hPa</div>
+        </div>
+      </div>
+
+      <div class="card col-charts">
+        <div class="chart-section-heading">
+          <div class="chart-section-title">{{ t.chart_title }}</div>
+          <span class="chart-legend"><span class="leg-grid">{{ t.legend_precip }}</span><span class="leg-solid">{{ t.legend_temp }}</span><span class="leg-hist">{{ t.legend_hist }}</span></span>
+        </div>
+        <!-- Trinity mode (see base.html's cfg-trinity-toggle): both layouts
+             always sit in the DOM, charts.js's applyTrinityMode toggles
+             which one's visible (and draws into it) client-side. The
+             initial hidden/visible split here is just so the right one
+             shows before the first JS render pass runs, not a gate on
+             which markup exists -- see dashboard/views.py's trinity_on. -->
+        <div class="trinity-sources{% if not trinity_on %} hidden{% endif %}">
+          <div class="stk-header">
+            {{ t.chart_owm }}
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-owm"></canvas></div>
+
+          <div class="stk-header">
+            {{ t.chart_yr }}
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-yr"></canvas></div>
+
+          <div class="stk-header">
+            {{ t.chart_om }}
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-om"></canvas></div>
+        </div>
+
+        <div class="trinity-mean{% if trinity_on %} hidden{% endif %}">
+          <div class="stk-header">
+            {{ t.chart_mean }}
+          </div>
+          <div class="chart-scroll"><canvas id="chart-rain-mean"></canvas></div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+{% endblock %}
+
+{% block page_script %}<script src="/static/charts.js"></script><script src="/static/weather.js"></script>{% endblock %}

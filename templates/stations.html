@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t.station_title }}{% endblock %}
+
+{% block content %}
+
+  <section class="sensor-stations" aria-labelledby="sensor-stations-title">
+    <div class="sensor-stations-header">
+      <div>
+        <h1 id="sensor-stations-title" class="card-label">Sensor stations</h1>
+        <p class="sensor-stations-subtitle">Environmental readings from connected field sensors</p>
+      </div>
+      <span class="sensor-count" aria-label="1 sensor">01 sensor</span>
+    </div>
+
+    <div class="sensor-widget-grid">
+      <article class="card sensor-widget" aria-labelledby="sensor-perpetuo-socorro">
+        <header class="sensor-widget-header">
+          <div>
+            <div class="sensor-kicker">Sensor</div>
+            <h2 id="sensor-perpetuo-socorro" class="sensor-name">perpetuo socorro</h2>
+          </div>
+          <span class="sensor-state">Mock data</span>
+        </header>
+
+        <dl class="sensor-readings">
+          <div class="sensor-reading sensor-reading-primary">
+            <dt>Temperature</dt>
+            <dd>24.21<span class="sensor-unit">°C</span></dd>
+          </div>
+          <div class="sensor-reading sensor-reading-primary">
+            <dt>Humidity</dt>
+            <dd>67.17<span class="sensor-unit">% RH</span></dd>
+          </div>
+          <div class="sensor-reading">
+            <dt>Illuminance</dt>
+            <dd>545.01<span class="sensor-unit">lx</span></dd>
+          </div>
+          <div class="sensor-reading">
+            <dt>DLI</dt>
+            <dd>1.5116<span class="sensor-unit">mol/(m<sup>2</sup>·d)</span></dd>
+          </div>
+          <div class="sensor-reading sensor-reading-uptime">
+            <dt>Uptime</dt>
+            <dd>73<span class="sensor-unit">min</span></dd>
+          </div>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+{% endblock %}

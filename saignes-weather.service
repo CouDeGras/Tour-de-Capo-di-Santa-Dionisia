@@ -1,0 +1,17 @@
+[Unit]
+Description=Capo di Santa Dionisia weather/irrigation service (persistent -- tri-hourly forecast cycle, hourly METAR refresh, and MQTT pump-ack listener, all in one process; see weather_mqtt.py --service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=josue
+WorkingDirectory=/home/josue/saignes_en_padaine
+ExecStart=/usr/bin/python3 /home/josue/saignes_en_padaine/weather_mqtt.py --service
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
