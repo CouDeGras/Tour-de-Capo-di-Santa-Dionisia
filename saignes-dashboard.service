@@ -1,5 +1,5 @@
 [Unit]
-Description=Capo di Santa Dionisia irrigation dashboard
+Description=Capo di Santa Dionisia weather dashboard
 After=network.target
 
 [Service]

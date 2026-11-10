@@ -3,10 +3,10 @@ set -euo pipefail
 
 PROJ="/home/josue/saignes_en_padaine"
 
-echo "==> Installing Django and paho-mqtt system packages"
-apt-get install -y python3-django python3-paho-mqtt
+echo "==> Installing Django system packages"
+apt-get install -y python3-django
 
-echo "==> Applying Django migrations (auth/sessions/admin, plus dashboard's IrrigationDecision/MetarReading -- irrigation and METAR history now live in the DB, not CSV)"
+echo "==> Applying Django migrations for dashboard and airport observation history"
 python3 "$PROJ/manage.py" migrate --noinput
 
 echo "==> Installing systemd units"
@@ -21,7 +21,7 @@ systemctl daemon-reload
 echo "==> Enabling and starting dashboard (auto-starts on boot)"
 systemctl enable --now saignes-dashboard.service
 
-echo "==> Enabling and starting the weather/irrigation service (persistent -- tri-hourly forecast cycle, hourly METAR refresh, and MQTT pump-ack listener all in one process)"
+echo "==> Enabling weather forecasts and hourly airport observation refresh"
 systemctl enable --now saignes-weather.service
 
 echo "==> Reloading Avahi so the mDNS advertisement goes live"

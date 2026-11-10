@@ -6,6 +6,6 @@
     <type>_http._tcp</type>
     <port>8080</port>
     <txt-record>path=/</txt-record>
-    <txt-record>description=Irrigation dashboard</txt-record>
+    <txt-record>description=Weather dashboard</txt-record>
   </service>
 </service-group>

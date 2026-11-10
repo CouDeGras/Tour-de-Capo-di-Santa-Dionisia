@@ -1,6 +1,4 @@
 Django
 requests
-paho-mqtt
 tzdata
-cryptography
 skyfield>=1.47

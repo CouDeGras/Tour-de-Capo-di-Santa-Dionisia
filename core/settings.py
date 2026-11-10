@@ -1,24 +1,15 @@
-"""Django settings for the Capo di Santa Dionisia dashboard.
+"""Django settings for the weather dashboard.
 
-This project intentionally keeps the same runtime shape as the stdlib
-version it replaces: a single process, no reverse proxy, bound to 0.0.0.0
-and reached over plain HTTP on the LAN (see saignes-dashboard.service). The
-Electron/AppImage-bundled deployment (electron/) runs the same code but
-binds to 127.0.0.1 instead (its own runserver CLI arg, not a settings.py
-concern) and points DATA_DIR elsewhere via CAPO_DI_SANTA_DIONISIA_DATA_DIR,
-since it's a single-machine desktop app rather than a LAN service.
-Most dashboard state (weather cache, pump acks, site config) still lives in
-flat files under data/, read/written by dashboard/services.py. Irrigation
-decisions and METAR history live in the ORM instead (dashboard/models.py),
-written by weather_mqtt.py -- a separate, non-web process that bootstraps
-Django itself (django.setup()) purely to share this one schema definition.
+Weather caches and settings live under DATA_DIR/data; airport observations
+are stored in the shared SQLite database. Electron sets DATA_DIR to its
+writable application directory.
 """
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Same env var weather_mqtt.py reads for its own JSON caches (see that
+# Same env var weather.py reads for its own JSON caches (see that
 # file's _APP_DATA_ROOT) -- the Electron/AppImage-bundled deployment sets
 # this to a real writable per-user directory, since an AppImage mounts
 # read-only from a fresh temp path every launch and BASE_DIR would point
@@ -27,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("CAPO_DI_SANTA_DIONISIA_DATA_DIR") or BASE_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Matches the OWM_APPID pattern already used in weather_mqtt.py: an
+# Matches the OWM_APPID pattern already used in weather.py: an
 # env-var override with a hardcoded fallback, since this single-user LAN
 # dashboard has no secret-management story beyond "it's on the local box".
 SECRET_KEY = os.getenv(
@@ -87,13 +78,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "core.wsgi.application"
 
-# Backs Django's own auth/sessions/admin, plus dashboard.models'
-# IrrigationDecision/MetarReading (irrigation + METAR history, written by
-# weather_mqtt.py -- a separate OS process -- and read here). WAL mode
-# because that makes this a genuine multi-process concurrent-access
-# database (one writer process, one reader process) rather than SQLite's
-# usual single-process case; WAL substantially cuts "database is locked"
-# errors between the two.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

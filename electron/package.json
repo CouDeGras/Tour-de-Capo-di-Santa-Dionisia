@@ -2,7 +2,7 @@
   "name": "capo-di-santa-dionisia",
   "productName": "Capo di Santa Dionisia",
   "version": "1.0.0",
-  "description": "Irrigation dashboard and weather/MQTT service, bundled as a self-contained desktop app.",
+  "description": "Weather dashboard with forecasts, airport observations, and solar charts.",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -28,8 +28,14 @@
       "build/icon.ico"
     ],
     "extraResources": [
-      { "from": "resources/app", "to": "app" },
-      { "from": "resources/venv", "to": "venv" }
+      {
+        "from": "resources/app",
+        "to": "app"
+      },
+      {
+        "from": "resources/venv",
+        "to": "venv"
+      }
     ],
     "linux": {
       "target": "AppImage",
@@ -40,7 +46,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",

@@ -772,18 +772,9 @@ const solarDiagramResize = new ResizeObserver(() => {
 });
 solarDiagramResize.observe(document.querySelector('.solar-twilight-backbone'));
 
-// ── Render helpers ────────────────────────────────────────────────────────────
-// getColors/colForEpoch/colLayout/drawGrid now live in charts.js (loaded
-// before this file -- see weather.html), shared with irrigation.js's own
-// mean-of-sources chart.
 
 function rv(v, d = 1) { return v == null ? '—' : Number(v).toFixed(d); }
 
-// METAR's wind direction is a string, not always numeric -- "VRB" (variable
-// direction) is a real value real stations report, straight from
-// aviationweather.gov's API (see dashboard/models.py's MetarReading.wind_dir_deg
-// and weather_mqtt.py's latest.get("wdir")), not an edge case to coerce
-// away.
 function formatWindDir(dir) {
   if (dir == null || dir === '') return '—';
   if (String(dir).toUpperCase() === 'VRB') return 'VRB';
@@ -791,8 +782,6 @@ function formatWindDir(dir) {
   return Number.isFinite(deg) ? `${deg}°` : '—';
 }
 
-// Current observations come from METAR. Forecast ranges refresh with the
-// selected station independently of committed irrigation decisions.
 function renderMetrics(current, forecastStats) {
   const cur  = current || {};
   const tMin = forecastStats.tmin24_c;
@@ -809,9 +798,6 @@ function renderMetrics(current, forecastStats) {
   document.getElementById('m-pressure').textContent   = cur.pressure_hpa != null ? rv(cur.pressure_hpa, 0) : '—';
 }
 
-// hLabel/dateMarks/AXIS_STEP/RAIN_MIN_MAX_MM/combinedAxis/renderRainCharts/
-// renderMeanChart/applyTrinityMode now live in charts.js (loaded before this
-// file -- see weather.html), shared with irrigation.js.
 
 // ── Main refresh ─────────────────────────────────────────────────────────────
 

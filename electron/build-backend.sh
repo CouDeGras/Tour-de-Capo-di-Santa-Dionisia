@@ -19,7 +19,7 @@ rm -rf "$RESOURCES"
 mkdir -p "$RESOURCES/app"
 
 echo "==> Copying Python project source"
-for item in core dashboard static templates weather_mqtt.py manage.py requirements.txt; do
+for item in core dashboard static templates weather.py manage.py requirements.txt; do
   cp -r "$PROJ_ROOT/$item" "$RESOURCES/app/$item"
 done
 find "$RESOURCES/app" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

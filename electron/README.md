@@ -66,7 +66,7 @@ version, or the cache schema changes. Use
 
 ## Linux AppImage build
 
-Packages the Django dashboard + `weather_mqtt.py --service` (the same code
+Packages the Django dashboard + `weather.py --service` (the same code
 the `saignes-dashboard.service`/`saignes-weather.service` systemd units run)
 into a single self-contained `.AppImage`, with its own bundled Python venv
 so the target machine doesn't need Python/Django/etc. pre-installed. Runs
@@ -89,7 +89,7 @@ easy to `chmod`/execute without quoting).
 
 `npm run build` always wipes and rebuilds `electron/resources/` from
 scratch first (via `build-backend.sh`) — it copies a clean snapshot of
-`core/`, `dashboard/`, `static/`, `templates/`, `weather_mqtt.py`,
+`core/`, `dashboard/`, `static/`, `templates/`, `weather.py`,
 `manage.py`, `requirements.txt` from the parent project, and builds a fresh
 venv from `requirements.txt`. Nothing from this dev machine's own
 `data/`/`db.sqlite3` is ever included.
@@ -111,7 +111,7 @@ First launch: runs `manage.py migrate`, starts the dashboard on
 systemd deployment's `saignes-dashboard.service` already binds `0.0.0.0:8080`
 there, so this needs its own port to run alongside it; also loopback-only
 since every `/api/*` endpoint including config writes is unauthenticated)
-and `weather_mqtt.py --service`, then opens a window once the dashboard
+and `weather.py --service`, then opens a window once the dashboard
 responds. On a completely fresh data directory, `--service` runs its first
 full fetch immediately rather than waiting for the next scheduled boundary
 (see `run_service()`'s bootstrap check), so a new install shows real data
@@ -125,9 +125,7 @@ not carry over automatically; copy the old directory's contents across if
 you want to keep it.
 
 **Closing the window does not stop the app** — it hides to the tray icon,
-because `weather_mqtt.py --service` is what actually publishes irrigation
-commands on its own schedule and should keep running whether or not the
-window is open. Use the tray icon's "Quit" to actually stop both backend
+so weather updates continue while the window is hidden. Use the tray icon's "Quit" to actually stop both backend
 processes.
 
 ### Dev mode (without packaging)

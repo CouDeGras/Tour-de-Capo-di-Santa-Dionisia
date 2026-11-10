@@ -1,15 +1,5 @@
 'use strict';
 
-// Electron shell for the bundled AppImage build: spawns the same Django
-// dashboard + weather_mqtt.py --service the systemd deployment runs, points
-// them at a real writable per-user data directory
-// (CAPO_DI_SANTA_DIONISIA_DATA_DIR), waits for the dashboard to answer,
-// then shows it in a window. Tray-resident:
-// closing the window hides it rather than quitting, since weather_mqtt.py
-// --service is what actually commands pumps on a schedule -- it should keep
-// running even if nobody has the window open, not stop the moment it's
-// closed. See ../.claude/plans (or the PR this shipped in) for the full
-// design rationale.
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
@@ -97,9 +87,6 @@ function waitForDashboard(timeoutMs = 30000, intervalMs = 300) {
 }
 
 async function startBackend() {
-  // Schema first -- weather_mqtt.py's ORM calls (IrrigationDecision,
-  // MetarReading) and the dashboard's own queries would fail against an
-  // unmigrated (or freshly-created, on first run) database otherwise.
   await runPython(['manage.py', 'migrate', '--noinput'], { waitForExit: true });
 
   // --noreload: same reasoning as the systemd deployment's ExecStart --
@@ -107,7 +94,7 @@ async function startBackend() {
   // to track/kill. 127.0.0.1 only: this is a single-machine desktop app,
   // and every /api/* endpoint (including config writes) is unauthenticated.
   runPython(['manage.py', 'runserver', '--noreload', `${DASHBOARD_HOST}:${DASHBOARD_PORT}`]);
-  runPython(['weather_mqtt.py', '--service']);
+  runPython(['weather.py', '--service']);
 
   await waitForDashboard();
 }
@@ -164,10 +151,6 @@ function createWindow(startupError) {
     });
   }
 
-  // Hide, don't quit -- the backend (specifically weather_mqtt.py --service,
-  // which publishes irrigation commands on its own schedule) should keep
-  // running whether or not the window is open. Only the tray's "Quit"
-  // actually stops it.
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();

@@ -27,38 +27,25 @@ def _render_page(request, template_name, active_page):
     lang = services.current_lang()
     strings = STRINGS[lang]
     i18n_json = json.dumps(strings, ensure_ascii=False).replace("</", "<\\/")
-    # citrus_on gates the Irrigation nav link and the Station settings
-    # fields (see base.html) -- when off (the default), weather_mqtt.py
-    # never computes or publishes an irrigation decision either (see its
-    # own CITRUS_MODE), so there's nothing there to look at.
     site_cfg = services.api_config_get()
-    citrus_on = site_cfg.get("citrus_mode") == "on"
-    # Only used for the initial hidden/visible class on the two chart-layout
-    # wrappers below (see weather.html/irrigation.html) -- both wrappers'
-    # DOM is always rendered either way, app.js/weather.js/irrigation.js
-    # toggle between them client-side from here on, no reload needed (unlike
-    # citrus_on above, which does gate what's actually in the DOM).
     trinity_on = site_cfg.get("trinity_mode") == "on"
-    response = render(request, template_name, {
-        "lang": lang, "t": strings, "i18n_json": i18n_json, "active_page": active_page,
-        "citrus_on": citrus_on, "trinity_on": trinity_on,
-    })
+    response = render(
+        request,
+        template_name,
+        {
+            "lang": lang,
+            "t": strings,
+            "i18n_json": i18n_json,
+            "active_page": active_page,
+            "trinity_on": trinity_on,
+        },
+    )
     return _no_store(response)
 
 
 @require_GET
 def weather_page(request):
     return _render_page(request, "weather.html", "weather")
-
-
-@require_GET
-def irrigation_page(request):
-    return _render_page(request, "irrigation.html", "irrigation")
-
-
-@require_GET
-def stations_page(request):
-    return _render_page(request, "stations.html", "stations")
 
 
 @require_GET
@@ -73,38 +60,38 @@ def api_solar(request):
     try:
         from .solar import daily_solar
 
-        data = json.loads(services.WEATHER_CACHE.read_text(encoding="utf-8")) if services.WEATHER_CACHE.exists() else {}
+        data = (
+            json.loads(services.WEATHER_CACHE.read_text(encoding="utf-8"))
+            if services.WEATHER_CACHE.exists()
+            else {}
+        )
         loc = data.get("location") or {}
         station = services.api_config_get()["station"]
-        if (loc.get("lat") is None or loc.get("lon") is None or not loc.get("tz")
-                or loc.get("station") != station):
+        if (
+            loc.get("lat") is None
+            or loc.get("lon") is None
+            or not loc.get("tz")
+            or loc.get("station") != station
+        ):
             return _no_store(JsonResponse({"available": False}))
         result = daily_solar(loc["lat"], loc["lon"], loc["tz"])
-        return _no_store(JsonResponse({"available": True, "station": station, **result}, **_JSON_PARAMS))
+        return _no_store(
+            JsonResponse(
+                {"available": True, "station": station, **result}, **_JSON_PARAMS
+            )
+        )
     except Exception:
         logging.getLogger(__name__).exception("Daily solar calculation failed")
         return _no_store(JsonResponse({"available": False}, status=503))
-
-
-@require_GET
-def api_history(request):
-    try:
-        n = int(request.GET.get("n", "14"))
-    except ValueError:
-        n = 14
-    return _no_store(JsonResponse(services.api_history(n), safe=False, **_JSON_PARAMS))
-
-
-@require_GET
-def api_acks(request):
-    return _no_store(JsonResponse(services.api_acks(), safe=False, **_JSON_PARAMS))
 
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_config(request):
     if request.method == "GET":
-        return _no_store(JsonResponse(services.api_config_get(), safe=False, **_JSON_PARAMS))
+        return _no_store(
+            JsonResponse(services.api_config_get(), safe=False, **_JSON_PARAMS)
+        )
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -130,4 +117,6 @@ def api_refresh(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_clear_cache(request):
-    return _no_store(JsonResponse(services.api_clear_cache(), safe=False, **_JSON_PARAMS))
+    return _no_store(
+        JsonResponse(services.api_clear_cache(), safe=False, **_JSON_PARAMS)
+    )
