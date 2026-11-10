@@ -142,10 +142,10 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
-  const LANGS = ['en', 'fr', 'it', 'es', 'zh-Hant', 'ja'];
+  const LANGS = ['en', 'fr', 'it', 'es', 'zhs', 'zh-Hant', 'ja'];
   const LANG_LABELS = {
     en: 'English', fr: 'Français', it: 'Italiano', es: 'Español',
-    'zh-Hant': '繁體中文', ja: '日本語',
+    'zh-Hant': '粵語', ja: '日本語', zhs: '吴语',
   };
   const langBtn = document.getElementById('cfg-lang-btn');
   const langLabel = document.getElementById('cfg-lang-label');
@@ -235,7 +235,7 @@ window.addEventListener('DOMContentLoaded', () => {
       });
       if (!res.ok) throw new Error(await res.text());
       if (
-        fields.lang.value !== document.documentElement.lang
+        fields.lang.value !== (document.documentElement.dataset?.uiLocale || document.documentElement.lang)
       ) {
         window.location.reload();
         return;

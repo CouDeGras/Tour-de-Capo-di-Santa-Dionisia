@@ -74,6 +74,8 @@
     <!-- Right column: local time and location, weather metrics, then source charts. -->
     <div class="col-right">
 
+
+
       <div class="grid g-2">
         <div class="card">
           <div class="card-label">{{ t.card_local_time }}</div>
@@ -82,10 +84,20 @@
         </div>
 
         <div class="card">
-          <div class="card-label">{{ t.card_location }}</div>
+          <div class="loc-header">
+            <div class="card-label">{{ t.card_location }}</div>
+            <a id="loc-attribution" class="loc-attribution hidden" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+          </div>
           <div id="loc-name" class="loc-name">—</div>
-          <div id="loc-coords" class="card-subtext">—</div>
+          <div class="loc-meta">
+            <span class="loc-subtitle"><span id="loc-english" lang="en">—</span>, <span id="loc-coords">—</span></span>
+            </div>
         </div>
+      </div>
+
+      <div class="card weather-banner" role="status" aria-live="polite" aria-atomic="true" aria-label="{{ t.title_weather }}">
+        <div class="card-label">{{ t.title_weather }}</div>
+        <div id="current-weather-description" class="loc-name">{{ t.weather_unavailable }}</div>
       </div>
 
       <!-- All four raw airport metrics, one row, same large size. -->

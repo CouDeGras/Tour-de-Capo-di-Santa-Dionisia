@@ -2,3 +2,4 @@ Django
 requests
 tzdata
 skyfield>=1.47
+opencc-python-reimplemented

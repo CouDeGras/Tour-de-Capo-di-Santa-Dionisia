@@ -2,6 +2,15 @@
 from django.db import models
 
 
+class LocalityName(models.Model):
+    """Permanent Nominatim result, retaining every available name variant."""
+
+    coordinates = models.CharField(max_length=48, unique=True)
+    local_name = models.CharField(max_length=255)
+    english_name = models.CharField(max_length=255)
+    names = models.JSONField(default=dict)
+
+
 class MetarReading(models.Model):
     """One row per successful METAR poll (hourly current-only refresh, and
     the tri-hourly full cycle, both of which fetch METAR -- see

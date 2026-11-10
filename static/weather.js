@@ -6,8 +6,11 @@
 // ── Local clock (station's timezone, from /api/status's location.tz) ──────────
 
 let stationTz = null;
-const UI_LOCALE = document.documentElement.lang || 'en';
-const SOLAR_TIME_UNITS = /^(zh|ja)(-|$)/.test(UI_LOCALE)
+const UI_LOCALE = document.documentElement.dataset?.uiLocale || document.documentElement.lang || 'en';
+const FORMAT_LOCALE = UI_LOCALE === 'zhs' ? 'zh-Hans-CN' : UI_LOCALE;
+const SOLAR_TIME_UNITS = UI_LOCALE === 'zhs'
+  ? { hour: '时', minute: '分', second: '秒' }
+  : /^(zh|ja)(-|$)/.test(UI_LOCALE)
   ? { hour: '時', minute: '分', second: '秒' }
   : { hour: 'h', minute: 'm', second: 's' };
 
@@ -24,11 +27,11 @@ function tickLocalClock() {
   if (!stationTz) { timeEl.textContent = '—'; if (dateEl) dateEl.textContent = '—'; return; }
   const now = new Date();
   try {
-    timeEl.textContent = new Intl.DateTimeFormat(UI_LOCALE, {
+    timeEl.textContent = new Intl.DateTimeFormat(FORMAT_LOCALE, {
       timeZone: stationTz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     }).format(now);
     if (dateEl) {
-      dateEl.textContent = new Intl.DateTimeFormat(UI_LOCALE, {
+      dateEl.textContent = new Intl.DateTimeFormat(FORMAT_LOCALE, {
         timeZone: stationTz, weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
       }).format(now);
     }
@@ -43,15 +46,46 @@ setInterval(tickLocalClock, 1000);
 
 // ── Location widget ─────────────────────────────────────────────────────────
 
+let locationNameKey = '';
+let resolvedLocationNames = null;
+
 function renderLocation(location) {
   const loc = location || {};
   const nameEl = document.getElementById('loc-name');
   const coordsEl = document.getElementById('loc-coords');
+  const englishEl = document.getElementById('loc-english');
+  const attributionEl = document.getElementById('loc-attribution');
   if (!nameEl || !coordsEl) return;
-  nameEl.textContent = loc.city || loc.station_name || loc.station || '—';
-  coordsEl.textContent = (loc.lat != null && loc.lon != null)
+  const fallback = loc.city || loc.station_name || loc.station || '—';
+  const hasCoords = Number.isFinite(loc.lat) && Number.isFinite(loc.lon);
+  coordsEl.textContent = hasCoords
     ? `${loc.lat.toFixed(4)}°, ${loc.lon.toFixed(4)}°`
     : '—';
+  const key = JSON.stringify([loc.station, loc.lat, loc.lon, UI_LOCALE]);
+  const paint = names => {
+    nameEl.textContent = names?.name || fallback;
+    if (englishEl) englishEl.textContent = names?.english_name || fallback;
+    if (attributionEl) attributionEl.classList.toggle('hidden', !names?.available);
+  };
+  if (key === locationNameKey) {
+    paint(resolvedLocationNames);
+    return;
+  }
+  locationNameKey = key;
+  resolvedLocationNames = null;
+  paint(null);
+  if (!hasCoords) return;
+  // Local endpoint consults SQLite first. Polling the weather never retries
+  // this lookup; successful names survive app reloads and cache clearing.
+  void fetch('/api/location').then(response => {
+    if (!response.ok) throw new Error('Location names unavailable');
+    return response.json();
+  }).then(names => {
+    if (locationNameKey !== key || names.station !== loc.station || names.lang !== UI_LOCALE
+        || names.lat !== loc.lat || names.lon !== loc.lon) return;
+    resolvedLocationNames = names;
+    paint(names);
+  }).catch(error => console.error('Location name lookup failed:', error));
 }
 
 // Signed time relative to each event: negative until it occurs, positive after.
@@ -328,7 +362,7 @@ async function refreshSolar(status) {
     const seconds = data.day_length_seconds;
     duration.textContent = solarDuration(seconds);
     date.textContent = `${data.date} · ${data.timezone}`;
-    const clock = new Intl.DateTimeFormat(UI_LOCALE, {
+    const clock = new Intl.DateTimeFormat(FORMAT_LOCALE, {
       timeZone: data.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     });
     const noonEvent = data.stages.find(event => event.stage === 'solar_noon');
@@ -371,10 +405,10 @@ async function refreshSolar(status) {
       label.className = 'solar-event-label';
       const phaseName = I18N[`solar_${stage.phase}`];
       label.textContent = stage.stage === 'solar_noon' ? I18N.solar_solar_noon
-        : I18N.solar_enter_phase.replace('{phase}', phaseName.toLocaleLowerCase(UI_LOCALE));
+        : I18N.solar_enter_phase.replace('{phase}', phaseName.toLocaleLowerCase(FORMAT_LOCALE));
       if (stage.stage === 'sunrise' || stage.stage === 'sunset') {
         const anchor = I18N[stage.stage === 'sunrise' ? 'anchor_sunrise' : 'anchor_sunset'];
-        label.textContent += ` · ${anchor.toLocaleLowerCase(UI_LOCALE)}`;
+        label.textContent += ` · ${anchor.toLocaleLowerCase(FORMAT_LOCALE)}`;
       }
       const phase = document.createElement('span');
       phase.className = 'solar-phase-name';
@@ -803,11 +837,85 @@ function renderMetrics(current, forecastStats) {
 
 let solarStatus = null;
 
+function fitWeatherDescription(element) {
+  if (!element || element.clientWidth === 0) return;
+  // Re-read the stylesheet size so shorter text and wider layouts can grow
+  // back to the original location-name size, including its mobile rule.
+  element.style.removeProperty('font-size');
+  const maximum = parseFloat(getComputedStyle(element).fontSize);
+  element.style.maxHeight = 'none';
+  const fits = size => {
+    element.style.fontSize = `${size}px`;
+    const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+    return element.getBoundingClientRect().height <= lineHeight * 2 + 0.5
+      && element.scrollWidth <= element.clientWidth + 1;
+  };
+  if (!fits(maximum)) {
+    let low = 1, high = maximum;
+    for (let step = 0; step < 12; step++) {
+      const middle = (low + high) / 2;
+      if (fits(middle)) low = middle;
+      else high = middle;
+    }
+    element.style.fontSize = `${Math.floor(low * 100) / 100}px`;
+  }
+  element.style.removeProperty('max-height');
+}
+
+let weatherFitFrame = 0;
+function scheduleWeatherDescriptionFit() {
+  if (weatherFitFrame) return;
+  weatherFitFrame = requestAnimationFrame(() => {
+    weatherFitFrame = 0;
+    fitWeatherDescription(document.getElementById('current-weather-description'));
+  });
+}
+
+const weatherDescriptionElement = document.getElementById('current-weather-description');
+if (weatherDescriptionElement) {
+  if (typeof ResizeObserver !== 'undefined') {
+    let lastWidth = -1;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0].contentRect.width;
+      if (width !== lastWidth) {
+        lastWidth = width;
+        scheduleWeatherDescriptionFit();
+      }
+    });
+    observer.observe(weatherDescriptionElement);
+  }
+  window.addEventListener('resize', scheduleWeatherDescriptionFit);
+  document.fonts?.ready.then(scheduleWeatherDescriptionFit);
+  document.fonts?.addEventListener('loadingdone', scheduleWeatherDescriptionFit);
+  scheduleWeatherDescriptionFit();
+}
+
+function renderCurrentWeather(data) {
+  const element = document.getElementById('current-weather-description');
+  if (!element) return;
+  const descriptors = data.weather_descriptors;
+  const current = descriptors?.items?.find(item => item.horizon_hours === 0);
+  const available = descriptors?.station === data.location?.station
+    && !descriptors.stale;
+  const sourceNames = { metar: 'METAR', yr: 'Yr.no', owm: 'OpenWeatherMap', open_meteo: 'Open-Meteo' };
+  const descriptions = available ? (current?.votes || [])
+    .filter(vote => vote.condition !== 'unknown')
+    .map(vote => ({ source: sourceNames[vote.source] || vote.source,
+      text: vote.labels?.[UI_LOCALE] || vote.label }))
+    .filter(item => item.text) : [];
+  element.textContent = descriptions.length
+    ? descriptions.map(item => item.text).join(' / ')
+    : I18N.weather_unavailable;
+  element.title = descriptions.map(item => `${item.source}: ${item.text}`).join('\n');
+  scheduleWeatherDescriptionFit();
+}
+
 async function refresh() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
 
+    renderCurrentWeather(data);
     stationTz = (data.location || {}).tz || null;
     tickLocalClock();
     renderLocation(data.location);

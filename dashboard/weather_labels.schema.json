@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "weather_labels.schema.json",
+  "title": "Unified weather condition labels",
+  "type": "object",
+  "required": [
+    "version",
+    "locales",
+    "conditions",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "locales": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "conditions": {
+      "description": "Canonical conditions keyed by condition key.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/conditionKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/condition"
+      }
+    },
+    "sources": {
+      "type": "object",
+      "required": [
+        "wmo",
+        "owm",
+        "yr",
+        "metar"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "wmo": {
+          "$ref": "#/$defs/codeMapSource"
+        },
+        "owm": {
+          "$ref": "#/$defs/codeMapSource"
+        },
+        "yr": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/codeMapSource"
+            }
+          ],
+          "properties": {
+            "stripSuffixes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "metar": {
+          "$ref": "#/$defs/metarSource"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "conditionKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "condition": {
+      "type": "object",
+      "required": [
+        "group",
+        "precip",
+        "priority",
+        "dayNight",
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "enum": [
+            "clear",
+            "cloud",
+            "obscuration",
+            "drizzle",
+            "rain",
+            "freezing",
+            "mixed",
+            "snow",
+            "thunder",
+            "unknown",
+            "wind",
+            "hazard"
+          ]
+        },
+        "precip": {
+          "type": "object",
+          "required": [
+            "type",
+            "intensity",
+            "convective"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "none",
+                "drizzle",
+                "rain",
+                "freezing",
+                "mixed",
+                "snow",
+                "hail"
+              ]
+            },
+            "intensity": {
+              "enum": [
+                "none",
+                "light",
+                "moderate",
+                "heavy"
+              ]
+            },
+            "convective": {
+              "type": "boolean",
+              "description": "Showery / convective precipitation."
+            }
+          }
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Higher wins when several conditions apply at once (e.g. several METAR weather groups, or summarizing a period)."
+        },
+        "dayNight": {
+          "type": "boolean",
+          "description": "True if the icon should have separate day and night variants."
+        },
+        "label": {
+          "type": "object",
+          "description": "Display text keyed by locale. Every locale in /locales must be present.",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "codeMapSource": {
+      "type": "object",
+      "required": [
+        "field",
+        "map"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "Where the code lives in the provider's response."
+        },
+        "map": {
+          "type": "object",
+          "description": "Provider code (as a string) -> condition key, or null to fall back / show nothing.",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/conditionKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "metarSource": {
+      "type": "object",
+      "required": [
+        "ignorePrefixes",
+        "ignoreTokens",
+        "weatherRules",
+        "cloudCover",
+        "cloudFallback"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ignorePrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Skip weather groups starting with these (VC = vicinity, RE = recent)."
+        },
+        "ignoreTokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "weatherRules": {
+          "type": "array",
+          "description": "Tested in order against each present-weather group; first match gives that group's condition. Across groups, the highest priority wins.",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern",
+              "key"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "format": "regex"
+              },
+              "key": {
+                "$ref": "#/$defs/conditionKey"
+              }
+            }
+          }
+        },
+        "cloudCover": {
+          "type": "object",
+          "description": "Cloud amount / sky token -> condition. Use the greatest coverage among layers.",
+          "additionalProperties": {
+            "$ref": "#/$defs/conditionKey"
+          }
+        },
+        "cloudFallback": {
+          "$ref": "#/$defs/conditionKey"
+        }
+      }
+    }
+  }
+}

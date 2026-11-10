@@ -34,6 +34,7 @@ def _render_page(request, template_name, active_page):
         template_name,
         {
             "lang": lang,
+            "html_lang": "wuu-Hans" if lang == "zhs" else lang,
             "t": strings,
             "i18n_json": i18n_json,
             "active_page": active_page,
@@ -51,6 +52,16 @@ def weather_page(request):
 @require_GET
 def api_status(request):
     return _no_store(JsonResponse(services.api_status(), safe=False, **_JSON_PARAMS))
+
+
+@require_GET
+def api_weather_descriptors(request):
+    return _no_store(JsonResponse(services.api_weather_descriptors(), **_JSON_PARAMS))
+
+
+@require_GET
+def api_location(request):
+    return _no_store(JsonResponse(services.api_location(), **_JSON_PARAMS))
 
 
 @require_GET

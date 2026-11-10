@@ -1,0 +1,1098 @@
+{
+  "version": "1.0.0",
+  "locales": [
+    "en",
+    "fr",
+    "it",
+    "es",
+    "zh-Hant",
+    "ja",
+    "zhs"
+  ],
+  "conditions": {
+    "clear": {
+      "group": "clear",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 0,
+      "dayNight": true,
+      "label": {
+        "en": "Clear",
+        "fr": "Dégagé",
+        "it": "Sereno",
+        "es": "Despejado",
+        "ja": "晴れ",
+        "zh-Hant": "天晴",
+        "zhs": "晴"
+      }
+    },
+    "mostly_clear": {
+      "group": "cloud",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 5,
+      "dayNight": true,
+      "label": {
+        "en": "Mostly clear",
+        "fr": "Peu nuageux",
+        "it": "Poco nuvoloso",
+        "es": "Mayormente despejado",
+        "ja": "おおむね晴れ",
+        "zh-Hant": "少雲",
+        "zhs": "少云"
+      }
+    },
+    "partly_cloudy": {
+      "group": "cloud",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 10,
+      "dayNight": true,
+      "label": {
+        "en": "Partly cloudy",
+        "fr": "Partiellement nuageux",
+        "it": "Parzialmente nuvoloso",
+        "es": "Parcialmente nublado",
+        "ja": "晴れ時々曇り",
+        "zh-Hant": "局部多雲",
+        "zhs": "局部多云"
+      }
+    },
+    "mostly_cloudy": {
+      "group": "cloud",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 15,
+      "dayNight": false,
+      "label": {
+        "en": "Mostly cloudy",
+        "fr": "Très nuageux",
+        "it": "Molto nuvoloso",
+        "es": "Mayormente nublado",
+        "ja": "曇り時々晴れ",
+        "zh-Hant": "多雲",
+        "zhs": "多云"
+      }
+    },
+    "overcast": {
+      "group": "cloud",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 20,
+      "dayNight": false,
+      "label": {
+        "en": "Overcast",
+        "fr": "Couvert",
+        "it": "Coperto",
+        "es": "Cubierto",
+        "ja": "曇り",
+        "zh-Hant": "陰",
+        "zhs": "阴"
+      }
+    },
+    "mist": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 30,
+      "dayNight": false,
+      "label": {
+        "en": "Mist",
+        "fr": "Brume",
+        "it": "Foschia",
+        "es": "Neblina",
+        "ja": "もや",
+        "zh-Hant": "薄霧",
+        "zhs": "薄雾"
+      }
+    },
+    "haze": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 32,
+      "dayNight": false,
+      "label": {
+        "en": "Haze",
+        "fr": "Brume sèche",
+        "it": "Caligine",
+        "es": "Calima",
+        "ja": "煙霧",
+        "zh-Hant": "霾",
+        "zhs": "霾"
+      }
+    },
+    "fog": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 40,
+      "dayNight": false,
+      "label": {
+        "en": "Fog",
+        "fr": "Brouillard",
+        "it": "Nebbia",
+        "es": "Niebla",
+        "ja": "霧",
+        "zh-Hant": "霧",
+        "zhs": "雾"
+      }
+    },
+    "drizzle": {
+      "group": "drizzle",
+      "precip": {
+        "type": "drizzle",
+        "intensity": "light",
+        "convective": false
+      },
+      "priority": 50,
+      "dayNight": false,
+      "label": {
+        "en": "Drizzle",
+        "fr": "Bruine",
+        "it": "Pioviggine",
+        "es": "Llovizna",
+        "ja": "霧雨",
+        "zh-Hant": "毛毛雨",
+        "zhs": "毛毛雨"
+      }
+    },
+    "light_rain": {
+      "group": "rain",
+      "precip": {
+        "type": "rain",
+        "intensity": "light",
+        "convective": false
+      },
+      "priority": 55,
+      "dayNight": false,
+      "label": {
+        "en": "Light rain",
+        "fr": "Pluie faible",
+        "it": "Pioggia debole",
+        "es": "Lluvia ligera",
+        "ja": "小雨",
+        "zh-Hant": "小雨",
+        "zhs": "小雨"
+      }
+    },
+    "rain": {
+      "group": "rain",
+      "precip": {
+        "type": "rain",
+        "intensity": "moderate",
+        "convective": false
+      },
+      "priority": 60,
+      "dayNight": false,
+      "label": {
+        "en": "Rain",
+        "fr": "Pluie",
+        "it": "Pioggia",
+        "es": "Lluvia",
+        "ja": "雨",
+        "zh-Hant": "雨",
+        "zhs": "雨"
+      }
+    },
+    "showers": {
+      "group": "rain",
+      "precip": {
+        "type": "rain",
+        "intensity": "moderate",
+        "convective": true
+      },
+      "priority": 65,
+      "dayNight": true,
+      "label": {
+        "en": "Showers",
+        "fr": "Averses",
+        "it": "Rovesci",
+        "es": "Chubascos",
+        "ja": "にわか雨",
+        "zh-Hant": "陣雨",
+        "zhs": "阵雨"
+      }
+    },
+    "heavy_rain": {
+      "group": "rain",
+      "precip": {
+        "type": "rain",
+        "intensity": "heavy",
+        "convective": false
+      },
+      "priority": 75,
+      "dayNight": false,
+      "label": {
+        "en": "Heavy rain",
+        "fr": "Forte pluie",
+        "it": "Pioggia forte",
+        "es": "Lluvia intensa",
+        "ja": "大雨",
+        "zh-Hant": "大雨",
+        "zhs": "大雨"
+      }
+    },
+    "light_snow": {
+      "group": "snow",
+      "precip": {
+        "type": "snow",
+        "intensity": "light",
+        "convective": false
+      },
+      "priority": 58,
+      "dayNight": false,
+      "label": {
+        "en": "Light snow",
+        "fr": "Neige faible",
+        "it": "Neve debole",
+        "es": "Nieve ligera",
+        "ja": "小雪",
+        "zh-Hant": "小雪",
+        "zhs": "小雪"
+      }
+    },
+    "snow_showers": {
+      "group": "snow",
+      "precip": {
+        "type": "snow",
+        "intensity": "moderate",
+        "convective": true
+      },
+      "priority": 70,
+      "dayNight": true,
+      "label": {
+        "en": "Snow showers",
+        "fr": "Averses de neige",
+        "it": "Rovesci di neve",
+        "es": "Chubascos de nieve",
+        "ja": "にわか雪",
+        "zh-Hant": "陣雪",
+        "zhs": "阵雪"
+      }
+    },
+    "sleet": {
+      "group": "mixed",
+      "precip": {
+        "type": "mixed",
+        "intensity": "moderate",
+        "convective": false
+      },
+      "priority": 72,
+      "dayNight": false,
+      "label": {
+        "en": "Sleet",
+        "fr": "Neige fondue",
+        "it": "Nevischio",
+        "es": "Aguanieve",
+        "ja": "みぞれ",
+        "zh-Hant": "雨夾雪",
+        "zhs": "雨夹雪"
+      }
+    },
+    "snow": {
+      "group": "snow",
+      "precip": {
+        "type": "snow",
+        "intensity": "moderate",
+        "convective": false
+      },
+      "priority": 78,
+      "dayNight": false,
+      "label": {
+        "en": "Snow",
+        "fr": "Neige",
+        "it": "Neve",
+        "es": "Nieve",
+        "ja": "雪",
+        "zh-Hant": "雪",
+        "zhs": "雪"
+      }
+    },
+    "heavy_snow": {
+      "group": "snow",
+      "precip": {
+        "type": "snow",
+        "intensity": "heavy",
+        "convective": false
+      },
+      "priority": 80,
+      "dayNight": false,
+      "label": {
+        "en": "Heavy snow",
+        "fr": "Forte neige",
+        "it": "Neve forte",
+        "es": "Nevada intensa",
+        "ja": "大雪",
+        "zh-Hant": "大雪",
+        "zhs": "大雪"
+      }
+    },
+    "freezing_drizzle": {
+      "group": "freezing",
+      "precip": {
+        "type": "freezing",
+        "intensity": "light",
+        "convective": false
+      },
+      "priority": 84,
+      "dayNight": false,
+      "label": {
+        "en": "Freezing drizzle",
+        "fr": "Bruine verglaçante",
+        "it": "Pioviggine congelantesi",
+        "es": "Llovizna engelante",
+        "ja": "着氷性の霧雨",
+        "zh-Hant": "凍毛毛雨",
+        "zhs": "冻毛毛雨"
+      }
+    },
+    "freezing_rain": {
+      "group": "freezing",
+      "precip": {
+        "type": "freezing",
+        "intensity": "moderate",
+        "convective": false
+      },
+      "priority": 85,
+      "dayNight": false,
+      "label": {
+        "en": "Freezing rain",
+        "fr": "Pluie verglaçante",
+        "it": "Pioggia congelantesi",
+        "es": "Lluvia engelante",
+        "ja": "着氷性の雨",
+        "zh-Hant": "凍雨",
+        "zhs": "冻雨"
+      }
+    },
+    "thunderstorm": {
+      "group": "thunder",
+      "precip": {
+        "type": "rain",
+        "intensity": "moderate",
+        "convective": true
+      },
+      "priority": 90,
+      "dayNight": true,
+      "label": {
+        "en": "Thunderstorm",
+        "fr": "Orage",
+        "it": "Temporale",
+        "es": "Tormenta",
+        "ja": "雷雨",
+        "zh-Hant": "雷雨",
+        "zhs": "雷雨"
+      }
+    },
+    "thunderstorm_hail": {
+      "group": "thunder",
+      "precip": {
+        "type": "hail",
+        "intensity": "heavy",
+        "convective": true
+      },
+      "priority": 100,
+      "dayNight": false,
+      "label": {
+        "en": "Thunderstorm with hail",
+        "fr": "Orage avec grêle",
+        "it": "Temporale con grandine",
+        "es": "Tormenta con granizo",
+        "ja": "ひょうを伴う雷雨",
+        "zh-Hant": "雷雨伴冰雹",
+        "zhs": "雷雨伴冰雹"
+      }
+    },
+    "unknown": {
+      "group": "unknown",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 0,
+      "dayNight": false,
+      "label": {
+        "en": "Weather unavailable",
+        "fr": "Météo indisponible",
+        "it": "Meteo non disponibile",
+        "es": "Tiempo no disponible",
+        "zh-Hant": "暫無天氣資料",
+        "ja": "気象情報なし",
+        "zhs": "天气资料不可用"
+      }
+    },
+    "freezing_fog": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 82,
+      "dayNight": false,
+      "label": {
+        "en": "Freezing fog",
+        "fr": "Brouillard givrant",
+        "it": "Nebbia congelantesi",
+        "es": "Niebla engelante",
+        "zh-Hant": "凍霧",
+        "ja": "着氷性の霧",
+        "zhs": "冻雾"
+      }
+    },
+    "hail": {
+      "group": "mixed",
+      "precip": {
+        "type": "hail",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 88,
+      "dayNight": false,
+      "label": {
+        "en": "Hail",
+        "fr": "Grêle",
+        "it": "Grandine",
+        "es": "Granizo",
+        "zh-Hant": "冰雹",
+        "ja": "ひょう",
+        "zhs": "冰雹"
+      }
+    },
+    "squalls": {
+      "group": "wind",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 86,
+      "dayNight": false,
+      "label": {
+        "en": "Squalls",
+        "fr": "Grains",
+        "it": "Groppi",
+        "es": "Turbonadas",
+        "zh-Hant": "颮",
+        "ja": "スコール",
+        "zhs": "飑"
+      }
+    },
+    "tornado": {
+      "group": "hazard",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 100,
+      "dayNight": false,
+      "label": {
+        "en": "Tornado or funnel cloud",
+        "fr": "Tornade ou nuage en entonnoir",
+        "it": "Tornado o nube a imbuto",
+        "es": "Tornado o nube embudo",
+        "zh-Hant": "龍捲風或漏斗雲",
+        "ja": "竜巻・漏斗雲",
+        "zhs": "龙卷风或漏斗云"
+      }
+    },
+    "duststorm": {
+      "group": "hazard",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 87,
+      "dayNight": false,
+      "label": {
+        "en": "Duststorm",
+        "fr": "Tempête de poussière",
+        "it": "Tempesta di polvere",
+        "es": "Tormenta de polvo",
+        "zh-Hant": "塵暴",
+        "ja": "砂じん嵐",
+        "zhs": "尘暴"
+      }
+    },
+    "sandstorm": {
+      "group": "hazard",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 87,
+      "dayNight": false,
+      "label": {
+        "en": "Sandstorm",
+        "fr": "Tempête de sable",
+        "it": "Tempesta di sabbia",
+        "es": "Tormenta de arena",
+        "zh-Hant": "沙暴",
+        "ja": "砂嵐",
+        "zhs": "沙暴"
+      }
+    },
+    "smoke": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 36,
+      "dayNight": false,
+      "label": {
+        "en": "Smoke",
+        "fr": "Fumée",
+        "it": "Fumo",
+        "es": "Humo",
+        "zh-Hant": "煙",
+        "ja": "煙",
+        "zhs": "烟"
+      }
+    },
+    "dust": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 36,
+      "dayNight": false,
+      "label": {
+        "en": "Dust",
+        "fr": "Poussière",
+        "it": "Polvere",
+        "es": "Polvo",
+        "zh-Hant": "浮塵",
+        "ja": "浮遊粉じん",
+        "zhs": "浮尘"
+      }
+    },
+    "sand": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 36,
+      "dayNight": false,
+      "label": {
+        "en": "Sand",
+        "fr": "Sable",
+        "it": "Sabbia",
+        "es": "Arena",
+        "zh-Hant": "沙塵",
+        "ja": "砂",
+        "zhs": "沙尘"
+      }
+    },
+    "volcanic_ash": {
+      "group": "hazard",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 94,
+      "dayNight": false,
+      "label": {
+        "en": "Volcanic ash",
+        "fr": "Cendres volcaniques",
+        "it": "Cenere vulcanica",
+        "es": "Ceniza volcánica",
+        "zh-Hant": "火山灰",
+        "ja": "火山灰",
+        "zhs": "火山灰"
+      }
+    },
+    "blowing_snow": {
+      "group": "snow",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 76,
+      "dayNight": false,
+      "label": {
+        "en": "Blowing snow",
+        "fr": "Chasse-neige",
+        "it": "Neve sollevata dal vento",
+        "es": "Nieve levantada por el viento",
+        "zh-Hant": "吹雪",
+        "ja": "地吹雪",
+        "zhs": "吹雪"
+      }
+    },
+    "ice_pellets": {
+      "group": "mixed",
+      "precip": {
+        "type": "mixed",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 76,
+      "dayNight": false,
+      "label": {
+        "en": "Ice pellets",
+        "fr": "Granules de glace",
+        "it": "Granuli di ghiaccio",
+        "es": "Gránulos de hielo",
+        "zh-Hant": "冰粒",
+        "ja": "凍雨",
+        "zhs": "冰粒"
+      }
+    },
+    "ice_crystals": {
+      "group": "snow",
+      "precip": {
+        "type": "snow",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 54,
+      "dayNight": false,
+      "label": {
+        "en": "Ice crystals",
+        "fr": "Cristaux de glace",
+        "it": "Cristalli di ghiaccio",
+        "es": "Cristales de hielo",
+        "zh-Hant": "冰晶",
+        "ja": "氷晶",
+        "zhs": "冰晶"
+      }
+    },
+    "unknown_precipitation": {
+      "group": "mixed",
+      "precip": {
+        "type": "mixed",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 56,
+      "dayNight": false,
+      "label": {
+        "en": "Unidentified precipitation",
+        "fr": "Précipitations non identifiées",
+        "it": "Precipitazioni non identificate",
+        "es": "Precipitación no identificada",
+        "zh-Hant": "不明降水",
+        "ja": "種類不明の降水",
+        "zhs": "不明降水"
+      }
+    },
+    "no_significant_cloud": {
+      "group": "cloud",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 3,
+      "dayNight": false,
+      "label": {
+        "en": "No significant cloud",
+        "fr": "Pas de nuages significatifs",
+        "it": "Nessuna nube significativa",
+        "es": "Sin nubes significativas",
+        "zh-Hant": "無顯著雲層",
+        "ja": "顕著な雲なし",
+        "zhs": "无显著云层"
+      }
+    },
+    "sky_obscured": {
+      "group": "obscuration",
+      "precip": {
+        "type": "none",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 42,
+      "dayNight": false,
+      "label": {
+        "en": "Sky obscured",
+        "fr": "Ciel obscurci",
+        "it": "Cielo oscurato",
+        "es": "Cielo oscurecido",
+        "zh-Hant": "天空受遮蔽",
+        "ja": "天空不明",
+        "zhs": "天空受遮蔽"
+      }
+    },
+    "thunderstorm_snow": {
+      "group": "thunder",
+      "precip": {
+        "type": "snow",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 91,
+      "dayNight": false,
+      "label": {
+        "en": "Thunderstorm with snow",
+        "fr": "Orage avec neige",
+        "it": "Temporale con neve",
+        "es": "Tormenta con nieve",
+        "zh-Hant": "雷雪",
+        "ja": "雪を伴う雷雨",
+        "zhs": "雷雪"
+      }
+    },
+    "thunderstorm_mixed": {
+      "group": "thunder",
+      "precip": {
+        "type": "mixed",
+        "intensity": "none",
+        "convective": false
+      },
+      "priority": 92,
+      "dayNight": false,
+      "label": {
+        "en": "Thunderstorm with mixed precipitation",
+        "fr": "Orage avec précipitations mixtes",
+        "it": "Temporale con precipitazioni miste",
+        "es": "Tormenta con precipitación mixta",
+        "zh-Hant": "雷雨伴混合降水",
+        "ja": "混合降水を伴う雷雨",
+        "zhs": "雷雨伴混合降水"
+      }
+    }
+  },
+  "sources": {
+    "wmo": {
+      "field": "hourly.weather_code",
+      "map": {
+        "0": "clear",
+        "1": "mostly_clear",
+        "2": "partly_cloudy",
+        "3": "overcast",
+        "45": "fog",
+        "48": "fog",
+        "51": "drizzle",
+        "53": "drizzle",
+        "55": "drizzle",
+        "56": "freezing_drizzle",
+        "57": "freezing_drizzle",
+        "61": "light_rain",
+        "63": "rain",
+        "65": "heavy_rain",
+        "66": "freezing_rain",
+        "67": "freezing_rain",
+        "71": "light_snow",
+        "73": "snow",
+        "75": "heavy_snow",
+        "77": "light_snow",
+        "80": "showers",
+        "81": "showers",
+        "82": "heavy_rain",
+        "85": "snow_showers",
+        "86": "snow_showers",
+        "95": "thunderstorm",
+        "96": "thunderstorm_hail",
+        "99": "thunderstorm_hail",
+        "97": "thunderstorm"
+      }
+    },
+    "owm": {
+      "field": "weather[0].id",
+      "map": {
+        "200": "thunderstorm",
+        "201": "thunderstorm",
+        "202": "thunderstorm",
+        "210": "thunderstorm",
+        "211": "thunderstorm",
+        "212": "thunderstorm",
+        "221": "thunderstorm",
+        "230": "thunderstorm",
+        "231": "thunderstorm",
+        "232": "thunderstorm",
+        "300": "drizzle",
+        "301": "drizzle",
+        "302": "drizzle",
+        "310": "drizzle",
+        "311": "drizzle",
+        "312": "drizzle",
+        "313": "drizzle",
+        "314": "drizzle",
+        "321": "drizzle",
+        "500": "light_rain",
+        "501": "rain",
+        "502": "heavy_rain",
+        "503": "heavy_rain",
+        "504": "heavy_rain",
+        "511": "freezing_rain",
+        "520": "showers",
+        "521": "showers",
+        "522": "showers",
+        "531": "showers",
+        "600": "light_snow",
+        "601": "snow",
+        "602": "heavy_snow",
+        "611": "ice_pellets",
+        "612": "ice_pellets",
+        "613": "ice_pellets",
+        "615": "sleet",
+        "616": "sleet",
+        "620": "snow_showers",
+        "621": "snow_showers",
+        "622": "snow_showers",
+        "701": "mist",
+        "711": "smoke",
+        "721": "haze",
+        "731": "dust",
+        "741": "fog",
+        "751": "sand",
+        "761": "dust",
+        "762": "volcanic_ash",
+        "771": "squalls",
+        "781": "tornado",
+        "800": "clear",
+        "801": "mostly_clear",
+        "802": "partly_cloudy",
+        "803": "mostly_cloudy",
+        "804": "overcast"
+      }
+    },
+    "yr": {
+      "field": "properties.timeseries[].data.next_{1,6,12}_hours.summary.symbol_code",
+      "stripSuffixes": [
+        "_day",
+        "_night",
+        "_polartwilight"
+      ],
+      "map": {
+        "clearsky": "clear",
+        "fair": "mostly_clear",
+        "partlycloudy": "partly_cloudy",
+        "cloudy": "overcast",
+        "fog": "fog",
+        "lightrain": "light_rain",
+        "rain": "rain",
+        "heavyrain": "heavy_rain",
+        "lightrainshowers": "showers",
+        "rainshowers": "showers",
+        "heavyrainshowers": "showers",
+        "lightsleet": "sleet",
+        "sleet": "sleet",
+        "heavysleet": "sleet",
+        "lightsleetshowers": "sleet",
+        "sleetshowers": "sleet",
+        "heavysleetshowers": "sleet",
+        "lightsnow": "light_snow",
+        "snow": "snow",
+        "heavysnow": "heavy_snow",
+        "lightsnowshowers": "snow_showers",
+        "snowshowers": "snow_showers",
+        "heavysnowshowers": "snow_showers",
+        "lightrainandthunder": "thunderstorm",
+        "rainandthunder": "thunderstorm",
+        "heavyrainandthunder": "thunderstorm",
+        "lightrainshowersandthunder": "thunderstorm",
+        "rainshowersandthunder": "thunderstorm",
+        "heavyrainshowersandthunder": "thunderstorm",
+        "lightsleetandthunder": "thunderstorm_mixed",
+        "sleetandthunder": "thunderstorm_mixed",
+        "heavysleetandthunder": "thunderstorm_mixed",
+        "lightsleetshowersandthunder": "thunderstorm_mixed",
+        "lightssleetshowersandthunder": "thunderstorm_mixed",
+        "sleetshowersandthunder": "thunderstorm_mixed",
+        "heavysleetshowersandthunder": "thunderstorm_mixed",
+        "lightsnowandthunder": "thunderstorm_snow",
+        "snowandthunder": "thunderstorm_snow",
+        "heavysnowandthunder": "thunderstorm_snow",
+        "lightsnowshowersandthunder": "thunderstorm_snow",
+        "lightssnowshowersandthunder": "thunderstorm_snow",
+        "snowshowersandthunder": "thunderstorm_snow",
+        "heavysnowshowersandthunder": "thunderstorm_snow"
+      }
+    },
+    "metar": {
+      "ignorePrefixes": [
+        "VC",
+        "RE"
+      ],
+      "ignoreTokens": [
+        "NSW"
+      ],
+      "weatherRules": [
+        {
+          "pattern": "^[-+]?TS\\w*(GR|GS)",
+          "key": "thunderstorm_hail"
+        },
+        {
+          "pattern": "^[-+]?TS\\w*(RASN|SNRA|PL)",
+          "key": "thunderstorm_mixed"
+        },
+        {
+          "pattern": "^[-+]?TS\\w*SN",
+          "key": "thunderstorm_snow"
+        },
+        {
+          "pattern": "^[-+]?TS",
+          "key": "thunderstorm"
+        },
+        {
+          "pattern": "^[-+]?FZ\\w*RA",
+          "key": "freezing_rain"
+        },
+        {
+          "pattern": "^[-+]?FZ\\w*DZ",
+          "key": "freezing_drizzle"
+        },
+        {
+          "pattern": "^FZFG",
+          "key": "freezing_fog"
+        },
+        {
+          "pattern": "^[-+]?(SH)?(RASN|SNRA|DZSN|SNDZ)",
+          "key": "sleet"
+        },
+        {
+          "pattern": "^[-+]?(SH)?PL",
+          "key": "ice_pellets"
+        },
+        {
+          "pattern": "^[-+]?(SH)?(GR|GS)",
+          "key": "hail"
+        },
+        {
+          "pattern": "^(BL|DR)SN",
+          "key": "blowing_snow"
+        },
+        {
+          "pattern": "^[-+]?SH\\w*SN",
+          "key": "snow_showers"
+        },
+        {
+          "pattern": "^[-+]?SH\\w*RA",
+          "key": "showers"
+        },
+        {
+          "pattern": "^\\+SN",
+          "key": "heavy_snow"
+        },
+        {
+          "pattern": "^-(SN|SG)|^SG",
+          "key": "light_snow"
+        },
+        {
+          "pattern": "^SN",
+          "key": "snow"
+        },
+        {
+          "pattern": "^\\+RA",
+          "key": "heavy_rain"
+        },
+        {
+          "pattern": "^-RA",
+          "key": "light_rain"
+        },
+        {
+          "pattern": "^RA",
+          "key": "rain"
+        },
+        {
+          "pattern": "^[-+]?DZ",
+          "key": "drizzle"
+        },
+        {
+          "pattern": "^(MI|BC|PR)?FG",
+          "key": "fog"
+        },
+        {
+          "pattern": "^BR",
+          "key": "mist"
+        },
+        {
+          "pattern": "^HZ",
+          "key": "haze"
+        },
+        {
+          "pattern": "^FU",
+          "key": "smoke"
+        },
+        {
+          "pattern": "^(BL|DR)?DU",
+          "key": "dust"
+        },
+        {
+          "pattern": "^(BL|DR)?SA",
+          "key": "sand"
+        },
+        {
+          "pattern": "^VA",
+          "key": "volcanic_ash"
+        },
+        {
+          "pattern": "^[-+]?DS",
+          "key": "duststorm"
+        },
+        {
+          "pattern": "^[-+]?SS",
+          "key": "sandstorm"
+        },
+        {
+          "pattern": "^SQ",
+          "key": "squalls"
+        },
+        {
+          "pattern": "^\\+?FC",
+          "key": "tornado"
+        },
+        {
+          "pattern": "^IC",
+          "key": "ice_crystals"
+        },
+        {
+          "pattern": "^[-+]?UP",
+          "key": "unknown_precipitation"
+        }
+      ],
+      "cloudCover": {
+        "CAVOK": "no_significant_cloud",
+        "SKC": "clear",
+        "CLR": "clear",
+        "NSC": "no_significant_cloud",
+        "NCD": "no_significant_cloud",
+        "FEW": "mostly_clear",
+        "SCT": "partly_cloudy",
+        "BKN": "mostly_cloudy",
+        "OVC": "overcast",
+        "VV": "sky_obscured"
+      },
+      "cloudFallback": "unknown"
+    }
+  }
+}

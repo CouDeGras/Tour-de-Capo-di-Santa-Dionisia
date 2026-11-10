@@ -1,7 +1,10 @@
 'use strict';
-const CHART_FONT_FAMILY = document.documentElement.lang === 'zh-Hant'
+const CHART_LOCALE = document.documentElement.dataset?.uiLocale || document.documentElement.lang;
+const CHART_FONT_FAMILY = CHART_LOCALE === 'zhs'
+  ? '"Space Mono", "Microsoft YaHei", "Noto Sans TC"'
+  : CHART_LOCALE === 'zh-Hant'
   ? '"Space Mono", "Noto Sans TC"'
-  : document.documentElement.lang === 'ja'
+  : CHART_LOCALE === 'ja'
     ? '"Space Mono", "Noto Sans JP"'
     : '"Space Mono"';
 let chartFontReadyPromise = null;
@@ -13,9 +16,11 @@ function chartFont(sizePx) {
 function ensureChartFontReady() {
   if (!document.fonts || !document.fonts.load) return Promise.resolve();
   if (!chartFontReadyPromise) {
-    const sample = document.documentElement.lang === 'zh-Hant'
+    const sample = CHART_LOCALE === 'zhs'
+      ? '0123456789气温雨量辰光场化日头'
+      : CHART_LOCALE === 'zh-Hant'
       ? '0123456789氣溫雨量歷史日出日落'
-      : document.documentElement.lang === 'ja'
+      : CHART_LOCALE === 'ja'
         ? '0123456789気温雨量履歴日の出入り'
         : '0123456789Mm°%';
     chartFontReadyPromise = document.fonts.load(`10px ${CHART_FONT_FAMILY}`, sample);

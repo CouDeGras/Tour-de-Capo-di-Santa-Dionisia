@@ -29,6 +29,11 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 django.setup()
 from dashboard.models import MetarReading
+from dashboard.weather_conditions import (
+    calculate_descriptors,
+    forecast_snapshot,
+    owm_current_snapshot,
+)
 
 # ====== APP DATA DIRECTORY ======
 # When CAPO_DI_SANTA_DIONISIA_DATA_DIR is set (the Electron/AppImage-bundled
@@ -98,6 +103,7 @@ YR_USER_AGENT = os.getenv(
 )
 
 OWM_API_URL = "https://api.openweathermap.org/data/2.5/forecast"
+OWM_CURRENT_API_URL = "https://api.openweathermap.org/data/2.5/weather"
 OWM_APPID = os.getenv("OWM_APPID", "4fb277504a118b9320ba6378abbdaf71")
 
 OPEN_METEO_API_URL = "https://api.open-meteo.com/v1/forecast"
@@ -107,6 +113,8 @@ TIMEOUT_SECONDS = 20
 HOURS_AHEAD = 120
 
 WEATHER_CACHE_JSON = str(_DATA_DIR / "weather_cache.json")
+CONDITION_FORECASTS_JSON = str(_DATA_DIR / "condition_forecasts.json")
+WEATHER_DESCRIPTORS_JSON = str(_DATA_DIR / "weather_descriptors.json")
 RUN_INTERVAL_HOURS = 3
 
 # Per-source fetch retry + stale-fallback cache. A source's raw payload is
@@ -472,6 +480,34 @@ def atomic_write_json(path: str, payload: Dict[str, Any]) -> None:
     os.replace(tmp_name, out_path)
 
 
+def refresh_weather_descriptors(
+    location, now_utc, observation, new_forecasts=None, live_errors=None
+):
+    """Persist five descriptors even when the main forecast cycle cannot finish."""
+    state = _load_json_dict(CONDITION_FORECASTS_JSON)
+    if (state.get("station"), state.get("lat"), state.get("lon")) != (
+        location.station,
+        location.lat,
+        location.lon,
+    ):
+        state = {
+            "station": location.station,
+            "lat": location.lat,
+            "lon": location.lon,
+            "forecasts": {},
+            "live_errors": {},
+        }
+    if new_forecasts is not None:
+        state["forecasts"].update(new_forecasts)
+    state["live_errors"].update(live_errors or {})
+    result = calculate_descriptors(
+        location.station, now_utc, state["forecasts"], observation, state["live_errors"]
+    )
+    atomic_write_json(CONDITION_FORECASTS_JSON, state)
+    atomic_write_json(WEATHER_DESCRIPTORS_JSON, result)
+    return result
+
+
 def parse_iso_utc(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
 
@@ -594,6 +630,47 @@ def extract_rows_yr_with_cumulative(
 
 
 # ---------- OpenWeatherMap ----------
+def fetch_owm_current(session, lat, lon):
+    response = session.get(
+        OWM_CURRENT_API_URL,
+        params={
+            "lat": f"{lat:.4f}",
+            "lon": f"{lon:.4f}",
+            "appid": OWM_APPID,
+            "units": "metric",
+        },
+        timeout=(3, 8),
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"OpenWeatherMap current HTTP {response.status_code}")
+    return response.json()
+
+
+def fetch_owm_current_with_retry(session, lat, lon, now_utc):
+    """A current-source failure must not prevent the other weather updates."""
+    error = None
+    for attempt in range(2):
+        try:
+            return (
+                owm_current_snapshot(fetch_owm_current(session, lat, lon), now_utc),
+                None,
+            )
+        except requests.RequestException as exc:
+            # Request exception URLs can contain the API key; never log them.
+            error = type(exc).__name__
+        except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+            error = str(exc)
+            if any(f"HTTP {status}" in error for status in (400, 401, 403, 404)):
+                break
+        if attempt == 0:
+            time.sleep(2)
+    print(
+        f"WARNING: OpenWeatherMap current conditions unavailable: {error}",
+        file=sys.stderr,
+    )
+    return None, error
+
+
 def fetch_owm_forecast(
     session: requests.Session, lat: float, lon: float
 ) -> Dict[str, Any]:
@@ -947,6 +1024,8 @@ def metar_latest_observation(
         "pressure_hpa": latest.get("altim"),
         "vpd_kpa": vpd,
         "raw_ob": latest.get("rawOb"),
+        "wx_string": latest.get("wxString"),
+        "clouds": latest.get("clouds") or [],
     }
 
 
@@ -1204,6 +1283,8 @@ def current_conditions_block(
         "pressure_hpa": current_obs["pressure_hpa"],
         "vpd_kpa": current_obs["vpd_kpa"],
         "raw_ob": current_obs["raw_ob"],
+        "wx_string": current_obs.get("wx_string"),
+        "clouds": current_obs.get("clouds") or [],
     }
 
 
@@ -1395,7 +1476,9 @@ def parse_args():
         help="Refresh forecasts every three hours and observations hourly.",
     )
     p.add_argument(
-        "--current-only", action="store_true", help="Refresh airport observations."
+        "--current-only",
+        action="store_true",
+        help="Refresh METAR and OpenWeatherMap current conditions.",
     )
     return p.parse_args()
 
@@ -1413,6 +1496,7 @@ def fetch_source_with_retry(
     station_id: str,
     attempts: int = FETCH_RETRY_ATTEMPTS,
     wait_seconds: float = FETCH_RETRY_WAIT_SECONDS,
+    condition_inputs: Optional[dict] = None,
 ) -> Tuple[Optional[List["Row"]], Optional[str]]:
     """Fetch one weather source with retries; on total failure, fall back to
     the last successfully-cached payload re-windowed to the current moment
@@ -1446,6 +1530,21 @@ def fetch_source_with_retry(
                         f"WARNING: could not cache {source_name} payload ({type(e).__name__}: {e})",
                         file=sys.stderr,
                     )
+                if condition_inputs is not None:
+                    provider = {
+                        "Yr.no": "yr",
+                        "OWM": "owm",
+                        "Open-Meteo": "open_meteo",
+                    }[source_name]
+                    try:
+                        condition_inputs[provider] = forecast_snapshot(
+                            provider, payload, now_utc
+                        )
+                    except (ValueError, TypeError, KeyError) as error:
+                        print(
+                            f"WARNING: {source_name} condition codes unavailable: {error}",
+                            file=sys.stderr,
+                        )
                 return rows, None
             last_err = f"{source_name} returned no rows in horizon."
         except Exception as e:
@@ -1591,6 +1690,9 @@ def run_current_only(args) -> int:
                 METAR_RAIN_LOOKBACK_HOURS,
                 SOURCE_PAYLOAD_CACHE["METAR"],
             )
+            owm_current, owm_current_err = fetch_owm_current_with_retry(
+                session, location.lat, location.lon, now_utc
+            )
     except Exception as e:
         print(
             f"ERROR: current-only METAR fetch failed ({type(e).__name__}: {e}).",
@@ -1601,10 +1703,19 @@ def run_current_only(args) -> int:
     status = report_obj.setdefault("status", {})
     status["metar_ok"] = metar_err is None
     status["metar_error"] = metar_err
+    status["owm_current_ok"] = owm_current_err is None
+    status["owm_current_error"] = owm_current_err
+    report_obj["weather_descriptors"] = refresh_weather_descriptors(
+        location,
+        datetime.now(timezone.utc),
+        report_obj["current"],
+        new_forecasts={"owm_current": owm_current} if owm_current else {},
+        live_errors={"metar": metar_err, "owm_current": owm_current_err},
+    )
     atomic_write_json(WEATHER_CACHE_JSON, report_obj)
     append_metar_log_row(report_obj["current"], location.tz_name)
     print(
-        f"current-only update: refreshed METAR current conditions in {WEATHER_CACHE_JSON} (metar_ok={metar_err is None})"
+        f"current-only update: refreshed METAR and OpenWeatherMap current conditions in {WEATHER_CACHE_JSON} (metar_ok={metar_err is None}, owm_ok={owm_current_err is None})"
     )
     return 0
 
@@ -1621,6 +1732,7 @@ def run_once(args) -> int:
     tz = get_tz(location.tz_name)
     now_local = datetime.now(tz)
     now_utc = now_local.astimezone(timezone.utc)
+    condition_inputs = {}
     try:
         with requests.Session() as session:
             session.headers.update({"Connection": "close"})
@@ -1635,6 +1747,7 @@ def run_once(args) -> int:
                 HOURS_AHEAD,
                 SOURCE_PAYLOAD_CACHE["Yr.no"],
                 location.station or DEFAULT_STATION,
+                condition_inputs=condition_inputs,
             )
             owm_rows, owm_err = fetch_source_with_retry(
                 "OWM",
@@ -1647,6 +1760,7 @@ def run_once(args) -> int:
                 HOURS_AHEAD,
                 SOURCE_PAYLOAD_CACHE["OWM"],
                 location.station or DEFAULT_STATION,
+                condition_inputs=condition_inputs,
             )
             om_rows, om_err = fetch_source_with_retry(
                 "Open-Meteo",
@@ -1659,6 +1773,7 @@ def run_once(args) -> int:
                 HOURS_AHEAD,
                 SOURCE_PAYLOAD_CACHE["Open-Meteo"],
                 location.station or DEFAULT_STATION,
+                condition_inputs=condition_inputs,
             )
             _recent_rain_mm, current_obs, metar_err = fetch_metar_rain_with_retry(
                 session,
@@ -1667,6 +1782,24 @@ def run_once(args) -> int:
                 METAR_RAIN_LOOKBACK_HOURS,
                 SOURCE_PAYLOAD_CACHE["METAR"],
             )
+            owm_current, owm_current_err = fetch_owm_current_with_retry(
+                session, location.lat, location.lon, now_utc
+            )
+            if owm_current:
+                condition_inputs["owm_current"] = owm_current
+        descriptors = refresh_weather_descriptors(
+            location,
+            datetime.now(timezone.utc),
+            current_conditions_block(current_obs, location.tz_name),
+            new_forecasts=condition_inputs,
+            live_errors={
+                "yr": yr_err,
+                "owm": owm_err,
+                "open_meteo": om_err,
+                "metar": metar_err,
+                "owm_current": owm_current_err,
+            },
+        )
         source_mode, yr_m, owm_m, om_m, ensemble = build_ensemble(
             now_utc=now_utc,
             now_local=now_local,
@@ -1709,6 +1842,9 @@ def run_once(args) -> int:
             output_path=args.output,
         )
         report_obj["next_run_epoch"] = next_quantized_run_epoch(now_local)
+        report_obj["weather_descriptors"] = descriptors
+        report_obj["status"]["owm_current_ok"] = owm_current_err is None
+        report_obj["status"]["owm_current_error"] = owm_current_err
         atomic_write_json(WEATHER_CACHE_JSON, report_obj)
         append_metar_log_row(report_obj["current"], location.tz_name)
         atomic_write_text(

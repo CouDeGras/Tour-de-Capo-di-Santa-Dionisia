@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -28,6 +29,7 @@ BASE_DIR = settings.BASE_DIR
 DATA_DIR = settings.DATA_DIR / "data"
 
 WEATHER_CACHE = DATA_DIR / "weather_cache.json"
+WEATHER_DESCRIPTORS = DATA_DIR / "weather_descriptors.json"
 SITE_CONFIG = DATA_DIR / "site_config.json"
 SITE_CONFIG_FIELDS = ("station", "lang", "sun_projection", "sun_view", "trinity_mode")
 WEATHER_SCRIPT = BASE_DIR / "weather.py"
@@ -35,6 +37,8 @@ REFRESH_TIMEOUT_SECONDS = 90
 
 CACHE_FILES = (
     WEATHER_CACHE,
+    WEATHER_DESCRIPTORS,
+    DATA_DIR / "condition_forecasts.json",
     DATA_DIR / "station_geo_cache.json",
     DATA_DIR / "last_ok_metar.json",
     DATA_DIR / "last_ok_om.json",
@@ -176,7 +180,9 @@ def api_status() -> dict:
     # already trims to just the part before the slash (see that function's
     # docstring). Trimmed here too so the widget shows "Shanghai" regardless
     # of which of the two sources actually won above.
-    loc["city"] = city.split("/", 1)[0].strip() if city else city
+    from .location_names import city_hint
+
+    loc["city"] = city_hint(city)
 
     comparison = data.setdefault("comparison", {})
     comparison["rows"] = _historic_rows(loc.get("tz") or "UTC", station) + list(
@@ -186,7 +192,66 @@ def api_status() -> dict:
     data["sun_projection"] = sun_projection
     data["sun_view"] = sun_view
     data["trinity_mode"] = trinity_mode
+    data["weather_descriptors"] = api_weather_descriptors()
     return data
+
+
+def api_weather_descriptors() -> dict:
+    """Read scheduled results; UI-language selection does not rerun voting."""
+    from .weather_conditions import calculate_descriptors, catalog
+
+    config = api_config_get()
+    try:
+        result = json.loads(WEATHER_DESCRIPTORS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        result = {}
+    if result.get("station") != config["station"]:
+        result = calculate_descriptors(
+            config["station"], datetime.now(timezone.utc), {}
+        )
+        result["available"] = False
+    else:
+        result["available"] = True
+    result["stale"] = time.time() > result["expires_at_epoch"]
+    result["lang"] = config["lang"]
+    for item in result["items"]:
+        item["labels"] = catalog()["conditions"][item["condition"]]["label"]
+        item["label"] = item["labels"][config["lang"]]
+        for vote in item["votes"]:
+            vote["labels"] = catalog()["conditions"][vote["condition"]]["label"]
+            vote["label"] = vote["labels"][config["lang"]]
+    return result
+
+
+def api_location() -> dict:
+    """Resolve locality names independently of weather/chart requests."""
+    from .location_names import city_hint, locality_names
+
+    cfg = api_config_get()
+    try:
+        weather = json.loads(WEATHER_CACHE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        weather = {}
+    location = weather.get("location") or {}
+    station = cfg["station"]
+    fallback = city_hint(location.get("station_name") or station)
+    if location.get("station") != station:
+        return {
+            "available": False,
+            "station": station,
+            "lang": cfg["lang"],
+            "name": station,
+            "english_name": station,
+        }
+    return {
+        "station": station,
+        "lang": cfg["lang"],
+        "lat": location.get("lat"),
+        "lon": location.get("lon"),
+        **locality_names(
+            location.get("lat"), location.get("lon"), cfg["lang"], fallback
+        ),
+    }
 
 
 def api_config_get() -> dict:

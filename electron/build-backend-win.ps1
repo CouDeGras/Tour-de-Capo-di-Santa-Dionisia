@@ -72,7 +72,7 @@ $PythonExe = Join-Path $PythonRuntime "python.exe"
 
 function Test-RuntimeImports {
     if (-not (Test-Path -LiteralPath $PythonExe)) { return $false }
-    & $PythonExe -c "import django, requests, tzdata, skyfield, jplephem" 2>$null
+    & $PythonExe -c "import django, requests, tzdata, skyfield, jplephem, opencc" 2>$null
     return $LASTEXITCODE -eq 0
 }
 
